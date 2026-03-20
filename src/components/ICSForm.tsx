@@ -59,20 +59,25 @@ export default function ICSForm() {
   // Settings State
   const [showSettings, setShowSettings] = useState(false);
   const [defaultReminders, setDefaultReminders] = useState<number[]>([]);
+  const [defaultTimezone, setDefaultTimezone] = useState<string>("");
 
   useEffect(() => {
     const saved = localStorage.getItem("ics_defaults");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        if (parsed.timezone) {
+          setDefaultTimezone(parsed.timezone);
+          setForm(prev => ({ ...prev, timezone: parsed.timezone }));
+        }
         if (Array.isArray(parsed.reminders)) {
           setDefaultReminders(parsed.reminders);
           setForm(prev => ({
             ...prev,
             reminders: parsed.reminders.map((mins: number) => ({ id: Math.random().toString(36).slice(2), minutes: mins }))
           }));
-          return;
         }
+        return;
       } catch (e) {}
     }
     const initialDefaults = [60, 1440];
@@ -83,9 +88,10 @@ export default function ICSForm() {
     }));
   }, []);
 
-  const saveDefaults = (reminders: number[]) => {
+  const saveDefaults = (reminders: number[], tz: string = defaultTimezone) => {
     setDefaultReminders(reminders);
-    localStorage.setItem("ics_defaults", JSON.stringify({ reminders }));
+    setDefaultTimezone(tz);
+    localStorage.setItem("ics_defaults", JSON.stringify({ reminders, timezone: tz }));
     toast.success("Default settings saved successfully!", { duration: 2000 });
   };
 
@@ -577,7 +583,22 @@ export default function ICSForm() {
                   </div>
                   
                   <div className="space-y-6">
-                    <div>
+                    <div className="space-y-3">
+                      <label className={labelStyles}>Default Time Zone</label>
+                      <div className="relative">
+                        <select 
+                          className={cn(inputStyles, "appearance-none pr-12 cursor-pointer bg-white/60 py-2.5")} 
+                          value={defaultTimezone} 
+                          onChange={(e) => saveDefaults(defaultReminders, e.target.value)}
+                        >
+                          <option value="">Floating (Resolves to user's device)</option>
+                          {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      </div>
+                    </div>
+
+                    <div className="pt-2">
                       <label className={labelStyles}>Default Alarms (Applied to new events)</label>
                       <div className="space-y-3 mt-3">
                         {defaultReminders.map((mins, i) => (
@@ -588,7 +609,7 @@ export default function ICSForm() {
                               onChange={(e) => {
                                 const newReminders = [...defaultReminders];
                                 newReminders[i] = parseInt(e.target.value);
-                                saveDefaults(newReminders);
+                                saveDefaults(newReminders, defaultTimezone);
                               }}
                             >
                               {REMINDER_OPTIONS.map((o) => <option key={o.minutes} value={o.minutes}>{o.label}</option>)}
@@ -596,7 +617,7 @@ export default function ICSForm() {
                             <button 
                               onClick={() => {
                                 const newReminders = defaultReminders.filter((_, idx) => idx !== i);
-                                saveDefaults(newReminders);
+                                saveDefaults(newReminders, defaultTimezone);
                               }}
                               className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
                             >
@@ -606,7 +627,7 @@ export default function ICSForm() {
                         ))}
                       </div>
                       <button 
-                        onClick={() => saveDefaults([...defaultReminders, 15])}
+                        onClick={() => saveDefaults([...defaultReminders, 15], defaultTimezone)}
                         className="mt-4 flex items-center gap-2 text-[13px] font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
                       >
                         <Plus className="w-4 h-4" /> Add Default Alarm
