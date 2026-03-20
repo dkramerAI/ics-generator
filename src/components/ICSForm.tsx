@@ -180,8 +180,14 @@ export default function ICSForm() {
   const removeReminder = (id: string) => set("reminders", form.reminders.filter((r) => r.id !== id));
 
   const handleSubmit = async () => {
-    if (events.some(e => !e.title)) {
-      toast.error("All events must have a title!");
+    const invalidIndex = events.findIndex(e => !e.title?.trim());
+    if (invalidIndex !== -1) {
+      setActiveIndex(invalidIndex);
+      toast.error(
+        events.length > 1 
+          ? `Event ${invalidIndex + 1} is missing a title!` 
+          : "Event title is required!"
+      );
       return;
     }
     setLoading(true);
