@@ -361,7 +361,7 @@ export default function ICSForm() {
               <div className="space-y-5">
                 <div>
                   <label className={labelStyles}>Event Title <span className="text-indigo-500">*</span></label>
-                  <input className={inputStyles} placeholder="E.g., Final Product Review" value={form.title} onChange={(e) => set("title", e.target.value)} />
+                  <input className={inputStyles} placeholder="Type event title here..." value={form.title} onChange={(e) => set("title", e.target.value)} />
                 </div>
                 <div>
                   <label className={labelStyles}>Description</label>
