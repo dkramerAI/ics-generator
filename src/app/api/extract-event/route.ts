@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || "",
+});
 
 export async function POST(req: NextRequest) {
   try {
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "GEMINI_API_KEY environment variable is missing." }, { status: 500 });
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: "OPENAI_API_KEY environment variable is missing." }, { status: 500 });
     }
 
     const formData = await req.formData();
@@ -17,17 +19,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please provide either text or an image to extract from." }, { status: 400 });
     }
 
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        responseMimeType: "application/json",
-      },
-    });
-
-    const parts: any[] = [];
-
-    parts.push({
-      text: `Extract the event details from the provided content. Return ONLY a JSON object exactly matching this schema:
+    const messages: any[] = [
+      {
+        role: "system",
+        content: `Extract the event details from the provided content. Return ONLY a JSON object exactly matching this schema:
 {
   "title": "Event name",
   "description": "Details or description about the event",
@@ -49,26 +44,40 @@ Parsing Rules:
 - Times must be in 24-hour HH:mm format. If no end time, assume 1 hour after start time.
 - If only one date is given, use it for both startDate and endDate.
 - For timezone, if you detect a specific location or timezone, infer the IANA timezone if possible (e.g. America/Los_Angeles). Otherwise use an empty string.`
-    });
+      }
+    ];
+
+    const userContent: any[] = [];
 
     if (text) {
-      parts.push({ text: "Text to parse: " + text });
+      userContent.push({ type: "text", text: "Text to parse:\n" + text });
     }
 
     if (file) {
       const arrayBuffer = await file.arrayBuffer();
       const base64Data = Buffer.from(arrayBuffer).toString("base64");
+      const dataUri = `data:${file.type};base64,${base64Data}`;
       
-      parts.push({
-        inlineData: {
-          data: base64Data,
-          mimeType: file.type,
+      userContent.push({
+        type: "image_url",
+        image_url: {
+          url: dataUri,
         },
       });
     }
 
-    const result = await model.generateContent(parts);
-    const responseText = result.response.text();
+    messages.push({
+      role: "user",
+      content: userContent,
+    });
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: messages,
+      response_format: { type: "json_object" },
+    });
+
+    const responseText = completion.choices[0].message.content || "{}";
 
     try {
       const parsed = JSON.parse(responseText);
