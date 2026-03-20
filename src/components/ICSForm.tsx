@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { EventFormData, Reminder, TIMEZONES, REMINDER_OPTIONS } from "@/types/event";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -55,6 +55,39 @@ export default function ICSForm() {
   const [loading, setLoading] = useState(false);
   const [newExdate, setNewExdate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [defaultReminders, setDefaultReminders] = useState<number[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("ics_defaults");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.reminders)) {
+          setDefaultReminders(parsed.reminders);
+          setForm(prev => ({
+            ...prev,
+            reminders: parsed.reminders.map((mins: number) => ({ id: Math.random().toString(36).slice(2), minutes: mins }))
+          }));
+          return;
+        }
+      } catch (e) {}
+    }
+    const initialDefaults = [60, 1440];
+    setDefaultReminders(initialDefaults);
+    setForm(prev => ({
+      ...prev,
+      reminders: initialDefaults.map((mins) => ({ id: Math.random().toString(36).slice(2), minutes: mins }))
+    }));
+  }, []);
+
+  const saveDefaults = (reminders: number[]) => {
+    setDefaultReminders(reminders);
+    localStorage.setItem("ics_defaults", JSON.stringify({ reminders }));
+    toast.success("Default settings saved successfully!", { duration: 2000 });
+  };
 
   // AI Extraction State
   const [aiLoading, setAiLoading] = useState(false);
@@ -173,9 +206,17 @@ export default function ICSForm() {
         {/* Header */}
         <motion.div 
           initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-          className="text-center mb-12"
+          className="text-center mb-12 relative"
         >
-          <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-white/60 shadow-[0_8px_16px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-white/50 backdrop-blur-xl mb-6">
+          <button 
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="absolute top-0 right-0 p-3 rounded-[20px] bg-white/40 border border-white/60 hover:bg-white text-slate-400 hover:text-indigo-600 transition-all shadow-sm hover:shadow-md active:scale-95"
+            title="Global Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+          <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-white/60 shadow-[0_8px_16px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-white/50 backdrop-blur-xl mb-6 mt-4 md:mt-0">
             <CalendarDays className="w-10 h-10 text-indigo-600 stroke-[1.5]" />
           </div>
           <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-indigo-900 via-slate-800 to-indigo-800 pb-2">
@@ -513,6 +554,79 @@ export default function ICSForm() {
             </button>
           </div>
         </motion.div>
+          {/* Settings Modal */}
+          <AnimatePresence>
+            {showSettings && (
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+              >
+                <div className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                  className="bg-white/95 backdrop-blur-2xl rounded-[32px] p-8 w-full max-w-md shadow-2xl border border-white/60 relative z-10"
+                >
+                  <button onClick={() => setShowSettings(false)} className="absolute top-6 right-6 p-2 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2.5 bg-indigo-50 rounded-xl">
+                      <Settings className="w-5 h-5 text-indigo-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 tracking-tight">Global Settings</h3>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <div>
+                      <label className={labelStyles}>Default Alarms (Applied to new events)</label>
+                      <div className="space-y-3 mt-3">
+                        {defaultReminders.map((mins, i) => (
+                          <div key={i} className="flex items-center gap-3">
+                            <select
+                              className={cn(inputStyles, "bg-white/60 py-2.5")}
+                              value={mins}
+                              onChange={(e) => {
+                                const newReminders = [...defaultReminders];
+                                newReminders[i] = parseInt(e.target.value);
+                                saveDefaults(newReminders);
+                              }}
+                            >
+                              {REMINDER_OPTIONS.map((o) => <option key={o.minutes} value={o.minutes}>{o.label}</option>)}
+                            </select>
+                            <button 
+                              onClick={() => {
+                                const newReminders = defaultReminders.filter((_, idx) => idx !== i);
+                                saveDefaults(newReminders);
+                              }}
+                              className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button 
+                        onClick={() => saveDefaults([...defaultReminders, 15])}
+                        className="mt-4 flex items-center gap-2 text-[13px] font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 px-4 py-2 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-4 h-4" /> Add Default Alarm
+                      </button>
+                    </div>
+                    
+                    <div className="pt-6 border-t border-slate-100">
+                      <button 
+                        onClick={() => setShowSettings(false)}
+                        className="w-full py-3.5 rounded-2xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-all active:scale-[0.98]"
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
       </div>
     </div>
   );
