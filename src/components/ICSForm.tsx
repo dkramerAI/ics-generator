@@ -51,7 +51,10 @@ const labelStyles = "block text-[13px] font-semibold text-slate-500 mb-2 upperca
 const cardStyles = "bg-white/60 border border-white/60 backdrop-blur-2xl rounded-[32px] overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.8)]";
 
 export default function ICSForm() {
-  const [form, setForm] = useState<EventFormData>(defaultForm);
+  const [events, setEvents] = useState<EventFormData[]>([defaultForm]);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const form = events[activeIndex];
+
   const [loading, setLoading] = useState(false);
   const [newExdate, setNewExdate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -68,24 +71,24 @@ export default function ICSForm() {
         const parsed = JSON.parse(saved);
         if (parsed.timezone) {
           setDefaultTimezone(parsed.timezone);
-          setForm(prev => ({ ...prev, timezone: parsed.timezone }));
+          setEvents(prev => prev.map(p => ({ ...p, timezone: parsed.timezone })));
         }
         if (Array.isArray(parsed.reminders)) {
           setDefaultReminders(parsed.reminders);
-          setForm(prev => ({
-            ...prev,
+          setEvents(prev => prev.map(p => ({
+            ...p,
             reminders: parsed.reminders.map((mins: number) => ({ id: Math.random().toString(36).slice(2), minutes: mins }))
-          }));
+          })));
         }
         return;
       } catch (e) {}
     }
     const initialDefaults = [60, 1440];
     setDefaultReminders(initialDefaults);
-    setForm(prev => ({
-      ...prev,
+    setEvents(prev => prev.map(p => ({
+      ...p,
       reminders: initialDefaults.map((mins) => ({ id: Math.random().toString(36).slice(2), minutes: mins }))
-    }));
+    })));
   }, []);
 
   const saveDefaults = (reminders: number[], tz: string = defaultTimezone) => {
@@ -102,8 +105,12 @@ export default function ICSForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof EventFormData>(key: K, value: EventFormData[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    setEvents((prev) => {
+      const next = [...prev];
+      next[activeIndex] = { ...next[activeIndex], [key]: value };
+      return next;
+    });
+  }, [activeIndex]);
 
   const handleAIExtract = async () => {
     if (!aiText && !aiFile) return;
@@ -121,34 +128,41 @@ export default function ICSForm() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to extract event");
 
-      const ext = data.data;
-      setForm(prev => {
-        const next = { ...prev };
-        if (ext.title) next.title = ext.title;
-        if (ext.description) next.description = ext.description;
-        if (ext.location) next.location = ext.location;
-        if (ext.url) next.url = ext.url;
-        if (ext.startDate) next.startDate = ext.startDate;
-        if (ext.startTime) next.startTime = ext.startTime;
-        if (ext.endDate) next.endDate = ext.endDate;
-        if (ext.endTime) next.endTime = ext.endTime;
-        if (ext.timezone) next.timezone = ext.timezone;
-        if (ext.organizer) next.organizer = ext.organizer;
-        if (ext.organizerEmail) next.organizerEmail = ext.organizerEmail;
-        if (ext.allDay === true) next.allDay = true;
-        
-        if (Array.isArray(ext.reminders)) {
-          next.reminders = ext.reminders.map((r: any) => ({
-            id: Math.random().toString(36).slice(2),
-            minutes: r.minutes || 15
-          }));
-        }
-
-        return next;
-      });
-      toast.success("Event details synthesized successfully!", {
-        icon: "✨", duration: 3000,
-      });
+      const aiEvents = data.data.events;
+      if (Array.isArray(aiEvents) && aiEvents.length > 0) {
+        setEvents(prev => {
+          const base = prev[0];
+          return aiEvents.map((ext: any) => {
+            const next = { ...base };
+            if (ext.title) next.title = ext.title;
+            if (ext.description) next.description = ext.description;
+            if (ext.location) next.location = ext.location;
+            if (ext.url) next.url = ext.url;
+            if (ext.startDate) next.startDate = ext.startDate;
+            if (ext.startTime) next.startTime = ext.startTime;
+            if (ext.endDate) next.endDate = ext.endDate;
+            if (ext.endTime) next.endTime = ext.endTime;
+            if (ext.timezone) next.timezone = ext.timezone;
+            if (ext.organizer) next.organizer = ext.organizer;
+            if (ext.organizerEmail) next.organizerEmail = ext.organizerEmail;
+            if (ext.allDay === true) next.allDay = true;
+            
+            if (ext.reminders && Array.isArray(ext.reminders) && ext.reminders.length > 0) {
+              next.reminders = ext.reminders.map((r: any) => ({
+                id: Math.random().toString(36).slice(2),
+                minutes: r.minutes || 15
+              }));
+            }
+            return next;
+          });
+        });
+        setActiveIndex(0);
+        toast.success(`Synthesized ${aiEvents.length} distinct events!`, {
+          icon: "✨", duration: 3000,
+        });
+      } else {
+        toast.error("No events could be deciphered.");
+      }
       setAiText("");
       setAiFile(null);
     } catch (err: any) {
@@ -166,15 +180,15 @@ export default function ICSForm() {
   const removeReminder = (id: string) => set("reminders", form.reminders.filter((r) => r.id !== id));
 
   const handleSubmit = async () => {
-    if (!form.title) {
-      toast.error("Event title is required!");
+    if (events.some(e => !e.title)) {
+      toast.error("All events must have a title!");
       return;
     }
     setLoading(true);
     try {
       const res = await fetch("/api/generate-ics", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(events),
       });
 
       if (!res.ok) throw new Error((await res.json()).error || "Generation failed");
@@ -291,6 +305,43 @@ export default function ICSForm() {
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.6 }}
           className={cardStyles}
         >
+          {/* Tab Bar */}
+          <div className="flex items-center gap-2 p-4 border-b border-indigo-100/50 overflow-x-auto no-scrollbar bg-white/40 backdrop-blur-md">
+            {events.map((ev, idx) => (
+              <button
+                key={idx} type="button" onClick={() => setActiveIndex(idx)}
+                className={cn(
+                  "px-4 py-2.5 rounded-xl text-[14px] font-bold transition-all whitespace-nowrap",
+                  activeIndex === idx ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20" : "bg-white/50 text-slate-600 hover:bg-white border border-slate-100"
+                )}
+              >
+                {ev.title || `Pending Event ${idx + 1}`}
+              </button>
+            ))}
+            <button
+              type="button" onClick={() => {
+                setEvents(prev => [...prev, { ...defaultForm, reminders: defaultReminders.map(m => ({ id: Math.random().toString(36).slice(2), minutes: m })), timezone: defaultTimezone || defaultForm.timezone }]);
+                setActiveIndex(events.length);
+              }}
+              className="p-2.5 rounded-xl bg-white/40 text-indigo-600 hover:bg-white hover:text-indigo-700 transition-all border border-indigo-100 flex items-center justify-center min-w-[40px] ml-1 group"
+              title="Add another event"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {events.length > 1 && (
+              <button
+               type="button" onClick={() => {
+                 setEvents(prev => prev.filter((_, i) => i !== activeIndex));
+                 setActiveIndex(Math.max(0, activeIndex - 1));
+               }}
+               className="p-2.5 ml-auto rounded-xl bg-rose-50/40 text-rose-500 hover:bg-rose-100 transition-all border border-rose-100 flex items-center justify-center min-w-[40px]"
+               title="Remove current event"
+              >
+               <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
           {/* Main Content */}
           <div className="p-6 md:p-10 space-y-12">
             

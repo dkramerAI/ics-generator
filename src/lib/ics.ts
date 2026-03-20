@@ -105,7 +105,10 @@ function buildValarm(minutes: number, uid: string): string[] {
   return lines;
 }
 
-export function generateICS(data: EventFormData): string {
+export function generateICS(data: EventFormData | EventFormData[]): string {
+  const events = Array.isArray(data) ? data : [data];
+  if (events.length === 0) return "";
+
   const lines: string[] = [];
 
   lines.push("BEGIN:VCALENDAR");
@@ -113,96 +116,104 @@ export function generateICS(data: EventFormData): string {
   lines.push("PRODID:-//ICS Generator//Apple Calendar Compatible//EN");
   lines.push("CALSCALE:GREGORIAN");
   lines.push("METHOD:PUBLISH");
-  lines.push("X-WR-CALNAME:Event");
-  lines.push("X-WR-TIMEZONE:" + data.timezone);
-
-  lines.push("BEGIN:VEVENT");
-
-  const uid = generateUID();
-  lines.push(`UID:${uid}`);
-  const dtstamp = formatDtstamp();
-  lines.push(`DTSTAMP:${dtstamp}`);
-  lines.push(`CREATED:${dtstamp}`);
-  lines.push(`LAST-MODIFIED:${dtstamp}`);
-
-  // DTSTART / DTEND
-  if (data.allDay) {
-    lines.push(`DTSTART;VALUE=DATE:${formatAllDay(data.startDate)}`);
-    // For all-day, DTEND is exclusive (next day)
-    const endDateObj = new Date(data.endDate + "T00:00:00");
-    endDateObj.setDate(endDateObj.getDate() + 1);
-    const pad = (n: number) => n.toString().padStart(2, "0");
-    const nextDay = `${endDateObj.getFullYear()}${pad(endDateObj.getMonth() + 1)}${pad(endDateObj.getDate())}`;
-    lines.push(`DTEND;VALUE=DATE:${nextDay}`);
+  
+  if (events.length === 1) {
+    const safeTitle = escapeICSText(events[0].title || "Event");
+    lines.push(`X-WR-CALNAME:${safeTitle}`);
+    lines.push(`X-WR-TIMEZONE:${events[0].timezone}`);
   } else {
-    if (data.timezone === "UTC") {
-      lines.push(`DTSTART:${formatDateTimeWithTZ(data.startDate, data.startTime, data.timezone)}`);
-      lines.push(`DTEND:${formatDateTimeWithTZ(data.endDate, data.endTime, data.timezone)}`);
+    lines.push("X-WR-CALNAME:Event Pack");
+  }
+
+  for (const ev of events) {
+    lines.push("BEGIN:VEVENT");
+
+    const uid = generateUID();
+    lines.push(`UID:${uid}`);
+    const dtstamp = formatDtstamp();
+    lines.push(`DTSTAMP:${dtstamp}`);
+    lines.push(`CREATED:${dtstamp}`);
+    lines.push(`LAST-MODIFIED:${dtstamp}`);
+
+    // DTSTART / DTEND
+    if (ev.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${formatAllDay(ev.startDate)}`);
+      // For all-day, DTEND is exclusive (next day)
+      const endDateObj = new Date(ev.endDate + "T00:00:00");
+      endDateObj.setDate(endDateObj.getDate() + 1);
+      const pad = (n: number) => n.toString().padStart(2, "0");
+      const nextDay = `${endDateObj.getFullYear()}${pad(endDateObj.getMonth() + 1)}${pad(endDateObj.getDate())}`;
+      lines.push(`DTEND;VALUE=DATE:${nextDay}`);
     } else {
-      lines.push(`DTSTART;TZID=${data.timezone}:${formatDateTimeWithTZ(data.startDate, data.startTime, data.timezone)}`);
-      lines.push(`DTEND;TZID=${data.timezone}:${formatDateTimeWithTZ(data.endDate, data.endTime, data.timezone)}`);
-    }
-  }
-
-  lines.push(foldLine(`SUMMARY:${escapeICSText(data.title)}`));
-
-  if (data.description) {
-    lines.push(foldLine(`DESCRIPTION:${escapeICSText(data.description)}`));
-  }
-
-  if (data.location) {
-    lines.push(foldLine(`LOCATION:${escapeICSText(data.location)}`));
-  }
-
-  if (data.url) {
-    lines.push(foldLine(`URL:${data.url}`));
-  }
-
-  if (data.notes) {
-    lines.push(foldLine(`COMMENT:${escapeICSText(data.notes)}`));
-  }
-
-  if (data.organizer && data.organizerEmail) {
-    lines.push(foldLine(`ORGANIZER;CN=${escapeICSText(data.organizer)}:MAILTO:${data.organizerEmail}`));
-  } else if (data.organizer) {
-    lines.push(foldLine(`ORGANIZER;CN=${escapeICSText(data.organizer)}:MAILTO:noreply@ics-generator.app`));
-  }
-
-  // RRULE
-  if (data.recurrence.freq) {
-    const rrule = buildRRule(data.recurrence);
-    if (rrule) lines.push(foldLine(rrule));
-  }
-
-  // EXDATE
-  if (data.exdates && data.exdates.length > 0) {
-    const validExdates = data.exdates.filter((d) => d.trim() !== "");
-    if (validExdates.length > 0) {
-      if (data.allDay) {
-        lines.push(`EXDATE;VALUE=DATE:${validExdates.map((d) => formatAllDay(d)).join(",")}`);
+      if (ev.timezone === "UTC") {
+        lines.push(`DTSTART:${formatDateTimeWithTZ(ev.startDate, ev.startTime, ev.timezone)}`);
+        lines.push(`DTEND:${formatDateTimeWithTZ(ev.endDate, ev.endTime, ev.timezone)}`);
       } else {
-        if (data.timezone === "UTC") {
-          lines.push(`EXDATE:${validExdates.map((d) => formatDateTimeWithTZ(d, data.startTime, data.timezone)).join(",")}`);
+        lines.push(`DTSTART;TZID=${ev.timezone}:${formatDateTimeWithTZ(ev.startDate, ev.startTime, ev.timezone)}`);
+        lines.push(`DTEND;TZID=${ev.timezone}:${formatDateTimeWithTZ(ev.endDate, ev.endTime, ev.timezone)}`);
+      }
+    }
+
+    lines.push(foldLine(`SUMMARY:${escapeICSText(ev.title)}`));
+
+    if (ev.description) {
+      lines.push(foldLine(`DESCRIPTION:${escapeICSText(ev.description)}`));
+    }
+
+    if (ev.location) {
+      lines.push(foldLine(`LOCATION:${escapeICSText(ev.location)}`));
+    }
+
+    if (ev.url) {
+      lines.push(foldLine(`URL:${ev.url}`));
+    }
+
+    if (ev.notes) {
+      lines.push(foldLine(`COMMENT:${escapeICSText(ev.notes)}`));
+    }
+
+    if (ev.organizer && ev.organizerEmail) {
+      lines.push(foldLine(`ORGANIZER;CN=${escapeICSText(ev.organizer)}:MAILTO:${ev.organizerEmail}`));
+    } else if (ev.organizer) {
+      lines.push(foldLine(`ORGANIZER;CN=${escapeICSText(ev.organizer)}:MAILTO:noreply@ics-generator.app`));
+    }
+
+    // RRULE
+    if (ev.recurrence.freq) {
+      const rrule = buildRRule(ev.recurrence);
+      if (rrule) lines.push(foldLine(rrule));
+    }
+
+    // EXDATE
+    if (ev.exdates && ev.exdates.length > 0) {
+      const validExdates = ev.exdates.filter((d) => d.trim() !== "");
+      if (validExdates.length > 0) {
+        if (ev.allDay) {
+          lines.push(`EXDATE;VALUE=DATE:${validExdates.map((d) => formatAllDay(d)).join(",")}`);
         } else {
-          lines.push(`EXDATE;TZID=${data.timezone}:${validExdates.map((d) => formatDateTimeWithTZ(d, data.startTime, data.timezone)).join(",")}`);
+          if (ev.timezone === "UTC") {
+            lines.push(`EXDATE:${validExdates.map((d) => formatDateTimeWithTZ(d, ev.startTime, ev.timezone)).join(",")}`);
+          } else {
+            lines.push(`EXDATE;TZID=${ev.timezone}:${validExdates.map((d) => formatDateTimeWithTZ(d, ev.startTime, ev.timezone)).join(",")}`);
+          }
         }
       }
     }
+
+    lines.push("CLASS:PUBLIC");
+    lines.push("STATUS:CONFIRMED");
+    lines.push("TRANSP:OPAQUE");
+    lines.push("SEQUENCE:0");
+
+    // VALARM blocks
+    for (const reminder of ev.reminders) {
+      const alarmLines = buildValarm(reminder.minutes, uid);
+      lines.push(...alarmLines);
+    }
+
+    lines.push("END:VEVENT");
   }
 
-  lines.push("CLASS:PUBLIC");
-  lines.push("STATUS:CONFIRMED");
-  lines.push("TRANSP:OPAQUE");
-  lines.push("SEQUENCE:0");
-
-  // VALARM blocks
-  for (const reminder of data.reminders) {
-    const alarmLines = buildValarm(reminder.minutes, uid);
-    lines.push(...alarmLines);
-  }
-
-  lines.push("END:VEVENT");
   lines.push("END:VCALENDAR");
-
   return lines.join("\r\n") + "\r\n";
 }

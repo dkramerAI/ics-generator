@@ -23,23 +23,28 @@ export async function POST(req: NextRequest) {
     const messages: any[] = [
       {
         role: "system",
-        content: `Extract the event details from the provided content. Return ONLY a JSON object exactly matching this schema:
+        content: `Extract the event details from the provided content. IF THERE ARE MULTIPLE EVENTS, EXTRACT ALL OF THEM into an array. Return ONLY a JSON object exactly matching this schema:
 {
-  "title": "Event name",
-  "description": "Details or description about the event",
-  "location": "Physical address or video call link",
-  "url": "Website or joining URL (starts with http)",
-  "organizer": "Name of the host or organizer",
-  "organizerEmail": "Email of the organizer if present",
-  "startDate": "YYYY-MM-DD",
-  "startTime": "HH:mm",
-  "endDate": "YYYY-MM-DD",
-  "endTime": "HH:mm",
-  "allDay": false
+  "events": [
+    {
+      "title": "Event name",
+      "description": "Details or description about the event",
+      "location": "Physical address or zoom link",
+      "url": "Meeting link or website",
+      "organizer": "Name of the host or organizer",
+      "organizerEmail": "Email of the organizer if present",
+      "startDate": "YYYY-MM-DD",
+      "startTime": "HH:mm",
+      "endDate": "YYYY-MM-DD",
+      "endTime": "HH:mm",
+      "allDay": false
+    }
+  ]
 }
 
 Parsing Rules:
 - **EXTREMELY IMPORTANT**: Think like an executive assistant. Deduce exactly what is meant even if ambiguously stated.
+- **ARRAY PROCESSING**: If the text contains multiple distinct events, appointments, shifts, or dates, you MUST process every single one and output them as separate objects inside the \`events\` array. Do NOT combine them into one long string.
 - **CURRENT DATE/TIME CONTEXT**: The current date and time right now is ${now.toISOString()} (UTC). You MUST use this exact moment as "today" or "now" to correctly calculate relative dates like "tomorrow", "tonight", "this weekend", or "next Friday".
 - If a value cannot be found or inferred, use an empty string "" for strings, and false for booleans.
 - Dates must be in YYYY-MM-DD format. If a year is omitted (e.g., "Friday, October 12th"), calculate the closest UPCOMING occurrence of that date from the current date context.
