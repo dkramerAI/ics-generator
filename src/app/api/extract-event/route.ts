@@ -35,11 +35,7 @@ export async function POST(req: NextRequest) {
   "startTime": "HH:mm",
   "endDate": "YYYY-MM-DD",
   "endTime": "HH:mm",
-  "allDay": false,
-  "timezone": "America/New_York",
-  "reminders": [
-    { "minutes": 15 }
-  ]
+  "allDay": false
 }
 
 Parsing Rules:
@@ -50,8 +46,8 @@ Parsing Rules:
 - Times must be in 24-hour HH:mm format. 
 - **Duration/End Time**: If an end time is not explicitly stated, calculate a logical end time based on the event context. (e.g., A "Dinner" is usually 2 hours, a "Quick sync" is 30 mins, a "Concert" is 3 hours). If completely unknown, default to 1 hour after start time.
 - If only one date is given, use it for both startDate and endDate.
-- **Timezone Inference**: If a physical location or city is provided (like "San Francisco" or "London"), you MUST output the exact IANA Timezone string for that location (e.g., "America/Los_Angeles" or "Europe/London"). If absolute certainty is impossible, leave as an empty string.
-- **Reminders/Alerts**: If the text specifies an alert or reminder like "remind me 1 hour before", parse that strictly into minutes (e.g. 60) and insert into the reminders array.
+- **Timezone Inference**: DO NOT include a \`timezone\` field UNLESS a physical location, city, or explicit timezone is mentioned in the prompt (e.g., "PST" or "London"). If mentioned, output the exact IANA Timezone string (e.g., "America/Los_Angeles" or "Europe/London"). If no location/timezone is implied, STRICTLY OMIT the \`timezone\` field entirely so the user's local device timezone is preserved.
+- **Reminders/Alerts**: DO NOT include a \`reminders\` field array UNLESS the text explicitly requests a specific alert/reminder (e.g., "remind me 1 hour before"). If explicitly requested, insert a reminders array containing exact integers like \`"reminders": [{ "minutes": 60 }]\`. If no alert is explicitly specified in the text, STRICTLY OMIT the \`reminders\` field entirely so the user's saved default alarms are not erased!
 - Automatically format URLs properly (ensure they start with http/https).`
       }
     ];
