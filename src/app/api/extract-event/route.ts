@@ -36,7 +36,10 @@ export async function POST(req: NextRequest) {
   "endDate": "YYYY-MM-DD",
   "endTime": "HH:mm",
   "allDay": false,
-  "timezone": "America/New_York"
+  "timezone": "America/New_York",
+  "reminders": [
+    { "minutes": 15 }
+  ]
 }
 
 Parsing Rules:
@@ -48,6 +51,7 @@ Parsing Rules:
 - **Duration/End Time**: If an end time is not explicitly stated, calculate a logical end time based on the event context. (e.g., A "Dinner" is usually 2 hours, a "Quick sync" is 30 mins, a "Concert" is 3 hours). If completely unknown, default to 1 hour after start time.
 - If only one date is given, use it for both startDate and endDate.
 - **Timezone Inference**: If a physical location or city is provided (like "San Francisco" or "London"), you MUST output the exact IANA Timezone string for that location (e.g., "America/Los_Angeles" or "Europe/London"). If absolute certainty is impossible, leave as an empty string.
+- **Reminders/Alerts**: If the text specifies an alert or reminder like "remind me 1 hour before", parse that strictly into minutes (e.g. 60) and insert into the reminders array.
 - Automatically format URLs properly (ensure they start with http/https).`
       }
     ];

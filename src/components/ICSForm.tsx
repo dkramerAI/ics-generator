@@ -97,6 +97,14 @@ export default function ICSForm() {
         if (ext.organizer) next.organizer = ext.organizer;
         if (ext.organizerEmail) next.organizerEmail = ext.organizerEmail;
         if (ext.allDay === true) next.allDay = true;
+        
+        if (Array.isArray(ext.reminders)) {
+          next.reminders = ext.reminders.map((r: any) => ({
+            id: Math.random().toString(36).slice(2),
+            minutes: r.minutes || 15
+          }));
+        }
+
         return next;
       });
       toast.success("Event details synthesized successfully!", {
