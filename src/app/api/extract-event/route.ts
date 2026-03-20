@@ -53,7 +53,8 @@ Parsing Rules:
 - If only one date is given, use it for both startDate and endDate.
 - **Timezone Inference**: DO NOT include a \`timezone\` field UNLESS a physical location, city, or explicit timezone is mentioned in the prompt (e.g., "PST" or "London"). If mentioned, output the exact IANA Timezone string (e.g., "America/Los_Angeles" or "Europe/London"). If no location/timezone is implied, STRICTLY OMIT the \`timezone\` field entirely so the user's local device timezone is preserved.
 - **Reminders/Alerts**: DO NOT include a \`reminders\` field array UNLESS the text explicitly requests a specific alert/reminder (e.g., "remind me 1 hour before"). If explicitly requested, insert a reminders array containing exact integers like \`"reminders": [{ "minutes": 60 }]\`. If no alert is explicitly specified in the text, STRICTLY OMIT the \`reminders\` field entirely so the user's saved default alarms are not erased!
-- Automatically format URLs properly (ensure they start with http/https).`
+- Automatically format URLs properly (ensure they start with http/https).
+- **IMAGE INTELLIGENCE**: If interpreting images, carefully scan all visual text, tiny footnotes, and visual formatting. Deduce context from flyer graphics or screenshot UI patterns.`
       }
     ];
 
@@ -72,6 +73,7 @@ Parsing Rules:
         type: "image_url",
         image_url: {
           url: dataUri,
+          detail: "high"
         },
       });
     }
@@ -82,7 +84,7 @@ Parsing Rules:
     });
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: messages,
       response_format: { type: "json_object" },
     });
