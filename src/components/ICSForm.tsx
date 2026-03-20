@@ -57,6 +57,12 @@ export default function ICSForm() {
   const [newExdate, setNewExdate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // AI State
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiText, setAiText] = useState("");
+  const [aiFile, setAiFile] = useState<File | null>(null);
+
   const set = useCallback(<K extends keyof EventFormData>(key: K, value: EventFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
@@ -126,6 +132,50 @@ export default function ICSForm() {
     }
   };
 
+  const handleAIExtract = async () => {
+    if (!aiText && !aiFile) return;
+    setAiLoading(true);
+    setAiError("");
+    
+    try {
+      const formData = new FormData();
+      if (aiText) formData.append("text", aiText);
+      if (aiFile) formData.append("image", aiFile);
+      
+      const res = await fetch("/api/extract-event", {
+        method: "POST",
+        body: formData,
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || data.raw || "Failed to extract event");
+      
+      const extracted = data.data;
+      setForm(prev => {
+        const next = { ...prev };
+        if (extracted.title) next.title = extracted.title;
+        if (extracted.description) next.description = extracted.description;
+        if (extracted.location) next.location = extracted.location;
+        if (extracted.url) next.url = extracted.url;
+        if (extracted.startDate) next.startDate = extracted.startDate;
+        if (extracted.startTime) next.startTime = extracted.startTime;
+        if (extracted.endDate) next.endDate = extracted.endDate;
+        if (extracted.endTime) next.endTime = extracted.endTime;
+        if (extracted.timezone) next.timezone = extracted.timezone;
+        if (extracted.organizer) next.organizer = extracted.organizer;
+        if (extracted.organizerEmail) next.organizerEmail = extracted.organizerEmail;
+        if (extracted.allDay === true) next.allDay = true;
+        return next;
+      });
+      setAiText("");
+      setAiFile(null);
+    } catch (err: any) {
+      setAiError(err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const inputCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-[15px] text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all";
   const labelCls = "block text-[13px] font-500 text-gray-500 mb-1.5 uppercase tracking-wide";
 
@@ -149,6 +199,64 @@ export default function ICSForm() {
           </div>
           <h1 className="text-[28px] font-[600] text-gray-900 tracking-tight">ICS Generator</h1>
           <p className="text-[15px] text-gray-500 mt-1">Create Apple Calendar-compatible events in seconds</p>
+        </div>
+
+        {/* AI Magic Section */}
+        <div className="bg-gradient-to-br from-[#f0f7ff] to-[#e6f0ff] rounded-3xl shadow-sm border border-[#cedef7] overflow-hidden mb-8 p-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[20px]">✨</span>
+            <h2 className="text-[15px] font-[600] text-blue-900 tracking-tight">Auto-fill with AI</h2>
+          </div>
+          <p className="text-[13px] text-blue-700 mb-4">
+            Upload a flyer, invitation image, or paste an email to automatically fill out the event details.
+          </p>
+          
+          <div className="space-y-3">
+            <textarea
+              className="w-full px-4 py-3 rounded-xl border border-blue-200 bg-white/70 backdrop-blur-sm text-[14px] text-gray-800 placeholder-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+              rows={2}
+              placeholder="Paste event text here..."
+              value={aiText}
+              onChange={(e) => setAiText(e.target.value)}
+              disabled={aiLoading}
+            />
+            
+            <div className="flex items-center gap-3">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setAiFile(e.target.files?.[0] || null)}
+                className="text-[13px] font-[500] text-blue-800 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[13px] file:font-[600] file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 transition-colors cursor-pointer"
+                disabled={aiLoading}
+              />
+              <div className="flex-1"></div>
+              <button
+                type="button"
+                onClick={handleAIExtract}
+                disabled={aiLoading || (!aiText && !aiFile)}
+                className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-[14px] font-[600] hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+              >
+                {aiLoading ? (
+                  <>
+                    <svg className="animate-spin w-4 h-4 text-white" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Extracting...
+                  </>
+                ) : (
+                  "Auto-fill"
+                )}
+              </button>
+            </div>
+            
+            {aiError && (
+              <p className="text-[13px] text-red-500 font-medium mt-2">{aiError}</p>
+            )}
+            {aiFile && (
+              <p className="text-[12px] text-blue-600 mt-1">Image selected: {aiFile.name}</p>
+            )}
+          </div>
         </div>
 
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
