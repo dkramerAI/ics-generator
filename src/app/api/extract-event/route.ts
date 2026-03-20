@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please provide either text or an image to extract from." }, { status: 400 });
     }
 
+    const now = new Date();
     const messages: any[] = [
       {
         role: "system",
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
 
 Parsing Rules:
 - **EXTREMELY IMPORTANT**: Think like an executive assistant. Deduce exactly what is meant even if ambiguously stated.
+- **CURRENT DATE/TIME CONTEXT**: The current date and time right now is ${now.toISOString()} (UTC). You MUST use this exact moment as "today" or "now" to correctly calculate relative dates like "tomorrow", "tonight", "this weekend", or "next Friday".
 - If a value cannot be found or inferred, use an empty string "" for strings, and false for booleans.
 - Dates must be in YYYY-MM-DD format. If a year is omitted (e.g., "Friday, October 12th"), calculate the closest UPCOMING occurrence of that date from the current date context.
 - Times must be in 24-hour HH:mm format. 
