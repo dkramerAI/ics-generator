@@ -120,7 +120,10 @@ export function generateICS(data: EventFormData): string {
 
   const uid = generateUID();
   lines.push(`UID:${uid}`);
-  lines.push(`DTSTAMP:${formatDtstamp()}`);
+  const dtstamp = formatDtstamp();
+  lines.push(`DTSTAMP:${dtstamp}`);
+  lines.push(`CREATED:${dtstamp}`);
+  lines.push(`LAST-MODIFIED:${dtstamp}`);
 
   // DTSTART / DTEND
   if (data.allDay) {
@@ -187,6 +190,7 @@ export function generateICS(data: EventFormData): string {
     }
   }
 
+  lines.push("CLASS:PUBLIC");
   lines.push("STATUS:CONFIRMED");
   lines.push("TRANSP:OPAQUE");
   lines.push("SEQUENCE:0");

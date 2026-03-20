@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { EventFormData, Reminder, TIMEZONES, REMINDER_OPTIONS } from "@/types/event";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Calendar, MapPin, Clock, Plus, X, Wand2, 
+  Image as ImageIcon, Link2, FileText, Settings, 
+  ChevronDown, Download, AlertCircle, CalendarDays, KeySquare, 
+  User, CheckCircle2, ChevronRight, Mail
+} from "lucide-react";
+import { toast } from "sonner";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 const DAYS_OF_WEEK = [
-  { label: "Mon", value: "MO" },
-  { label: "Tue", value: "TU" },
-  { label: "Wed", value: "WE" },
-  { label: "Thu", value: "TH" },
-  { label: "Fri", value: "FR" },
-  { label: "Sat", value: "SA" },
-  { label: "Sun", value: "SU" },
+  { label: "M", value: "MO" }, { label: "T", value: "TU" },
+  { label: "W", value: "WE" }, { label: "T", value: "TH" },
+  { label: "F", value: "FR" }, { label: "S", value: "SA" },
+  { label: "S", value: "SU" },
 ];
 
 function getDefaultDates() {
@@ -20,550 +31,480 @@ function getDefaultDates() {
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const fmtTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   return {
-    startDate: fmt(now),
-    startTime: fmtTime(now),
-    endDate: fmt(later),
-    endTime: fmtTime(later),
+    startDate: fmt(now), startTime: fmtTime(now),
+    endDate: fmt(later), endTime: fmtTime(later),
   };
 }
 
 const defaultDates = getDefaultDates();
 
 const defaultForm: EventFormData = {
-  title: "",
-  description: "",
-  location: "",
-  url: "",
-  notes: "",
-  organizer: "",
-  organizerEmail: "",
-  startDate: defaultDates.startDate,
-  startTime: defaultDates.startTime,
-  endDate: defaultDates.endDate,
-  endTime: defaultDates.endTime,
-  allDay: false,
+  title: "", description: "", location: "", url: "", notes: "", organizer: "", organizerEmail: "",
+  startDate: defaultDates.startDate, startTime: defaultDates.startTime, endDate: defaultDates.endDate,
+  endTime: defaultDates.endTime, allDay: false,
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York",
-  reminders: [],
-  recurrence: { freq: "", interval: 1, byDay: [] },
-  exdates: [],
+  reminders: [], recurrence: { freq: "", interval: 1, byDay: [] }, exdates: [],
 };
 
-type Status = { type: "success" | "error"; message: string } | null;
+const inputStyles = "w-full bg-white/40 border border-white/50 backdrop-blur-xl rounded-2xl px-4 py-3.5 text-[15px] font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400/50 focus:bg-white/80 transition-all duration-300 shadow-[inset_0_2px_4px_rgba(255,255,255,0.3),0_1px_2px_rgba(0,0,0,0.02)]";
+const labelStyles = "block text-[13px] font-semibold text-slate-500 mb-2 uppercase tracking-wide ml-1";
+const cardStyles = "bg-white/60 border border-white/60 backdrop-blur-2xl rounded-[32px] overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.8)]";
 
 export default function ICSForm() {
   const [form, setForm] = useState<EventFormData>(defaultForm);
-  const [status, setStatus] = useState<Status>(null);
   const [loading, setLoading] = useState(false);
   const [newExdate, setNewExdate] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // AI State
+  // AI Extraction State
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
   const [aiText, setAiText] = useState("");
   const [aiFile, setAiFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof EventFormData>(key: K, value: EventFormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const addReminder = () => {
-    const id = Math.random().toString(36).slice(2);
-    set("reminders", [...form.reminders, { id, minutes: 15 }]);
-  };
-
-  const updateReminder = (id: string, minutes: number) => {
-    set("reminders", form.reminders.map((r) => (r.id === id ? { ...r, minutes } : r)));
-  };
-
-  const removeReminder = (id: string) => {
-    set("reminders", form.reminders.filter((r) => r.id !== id));
-  };
-
-  const addExdate = () => {
-    if (newExdate && !form.exdates.includes(newExdate)) {
-      set("exdates", [...form.exdates, newExdate]);
-      setNewExdate("");
-    }
-  };
-
-  const removeExdate = (d: string) => {
-    set("exdates", form.exdates.filter((e) => e !== d));
-  };
-
-  const toggleByDay = (day: string) => {
-    const curr = form.recurrence.byDay || [];
-    const updated = curr.includes(day) ? curr.filter((d) => d !== day) : [...curr, day];
-    set("recurrence", { ...form.recurrence, byDay: updated });
-  };
-
-  const handleSubmit = async () => {
-    setStatus(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/generate-ics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        setStatus({ type: "error", message: err.error || "Something went wrong" });
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const cd = res.headers.get("Content-Disposition") || "";
-      const match = cd.match(/filename="?([^"]+)"?/);
-      a.download = match ? match[1] : "event.ics";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      setStatus({ type: "success", message: "Your .ics file has been downloaded. Open it to add to Apple Calendar." });
-    } catch {
-      setStatus({ type: "error", message: "Network error. Please try again." });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleAIExtract = async () => {
     if (!aiText && !aiFile) return;
     setAiLoading(true);
-    setAiError("");
-    
+
     try {
       const formData = new FormData();
       if (aiText) formData.append("text", aiText);
       if (aiFile) formData.append("image", aiFile);
       
       const res = await fetch("/api/extract-event", {
-        method: "POST",
-        body: formData,
+        method: "POST", body: formData,
       });
       
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || data.raw || "Failed to extract event");
-      
-      const extracted = data.data;
+      if (!res.ok) throw new Error(data.error || "Failed to extract event");
+
+      const ext = data.data;
       setForm(prev => {
         const next = { ...prev };
-        if (extracted.title) next.title = extracted.title;
-        if (extracted.description) next.description = extracted.description;
-        if (extracted.location) next.location = extracted.location;
-        if (extracted.url) next.url = extracted.url;
-        if (extracted.startDate) next.startDate = extracted.startDate;
-        if (extracted.startTime) next.startTime = extracted.startTime;
-        if (extracted.endDate) next.endDate = extracted.endDate;
-        if (extracted.endTime) next.endTime = extracted.endTime;
-        if (extracted.timezone) next.timezone = extracted.timezone;
-        if (extracted.organizer) next.organizer = extracted.organizer;
-        if (extracted.organizerEmail) next.organizerEmail = extracted.organizerEmail;
-        if (extracted.allDay === true) next.allDay = true;
+        if (ext.title) next.title = ext.title;
+        if (ext.description) next.description = ext.description;
+        if (ext.location) next.location = ext.location;
+        if (ext.url) next.url = ext.url;
+        if (ext.startDate) next.startDate = ext.startDate;
+        if (ext.startTime) next.startTime = ext.startTime;
+        if (ext.endDate) next.endDate = ext.endDate;
+        if (ext.endTime) next.endTime = ext.endTime;
+        if (ext.timezone) next.timezone = ext.timezone;
+        if (ext.organizer) next.organizer = ext.organizer;
+        if (ext.organizerEmail) next.organizerEmail = ext.organizerEmail;
+        if (ext.allDay === true) next.allDay = true;
         return next;
+      });
+      toast.success("Event details synthesized successfully!", {
+        icon: "✨", duration: 3000,
       });
       setAiText("");
       setAiFile(null);
     } catch (err: any) {
-      setAiError(err.message);
+      toast.error(err.message, { icon: <AlertCircle className="w-5 h-5 text-red-500" /> });
     } finally {
       setAiLoading(false);
     }
   };
 
-  const inputCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-[15px] text-gray-900 placeholder-gray-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all";
-  const labelCls = "block text-[13px] font-500 text-gray-500 mb-1.5 uppercase tracking-wide";
+  const addReminder = () => {
+    const id = Math.random().toString(36).slice(2);
+    set("reminders", [...form.reminders, { id, minutes: 15 }]);
+  };
+
+  const removeReminder = (id: string) => set("reminders", form.reminders.filter((r) => r.id !== id));
+
+  const handleSubmit = async () => {
+    if (!form.title) {
+      toast.error("Event title is required!");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/generate-ics", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+
+      if (!res.ok) throw new Error((await res.json()).error || "Generation failed");
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${form.title.replace(/\\s+/g, "_") || "event"}.ics`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      
+      toast.success("Calendar perfectly generated!", {
+        description: "Open the file to instantly add it to your calendar.",
+        icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+      });
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#f5f5f7] py-10 px-4">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-slate-50 to-rose-50/30 py-12 px-5 sm:px-8 font-sans antialiased text-slate-800 relative z-0 selection:bg-indigo-200">
+      <div className="absolute inset-0 z-[-1] overflow-hidden opacity-40 pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+        <div className="absolute top-40 -left-20 w-72 h-72 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+        <div className="absolute -bottom-40 right-20 w-80 h-80 bg-rose-200 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+      </div>
 
+      <div className="max-w-3xl mx-auto space-y-8">
         {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white shadow-sm border border-gray-100 mb-4">
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-              <rect x="3" y="6" width="22" height="19" rx="3" fill="#f5f5f7" stroke="#d1d1d6" strokeWidth="1.5"/>
-              <rect x="3" y="6" width="22" height="7" rx="3" fill="#007AFF"/>
-              <rect x="3" y="10" width="22" height="3" fill="#007AFF"/>
-              <circle cx="9" cy="19" r="1.5" fill="#007AFF"/>
-              <circle cx="14" cy="19" r="1.5" fill="#007AFF"/>
-              <circle cx="19" cy="19" r="1.5" fill="#d1d1d6"/>
-              <rect x="8" y="3" width="2.5" height="5" rx="1.25" fill="#8e8e93"/>
-              <rect x="17.5" y="3" width="2.5" height="5" rx="1.25" fill="#8e8e93"/>
-            </svg>
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+          className="text-center mb-12"
+        >
+          <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-white/60 shadow-[0_8px_16px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-white/50 backdrop-blur-xl mb-6">
+            <CalendarDays className="w-10 h-10 text-indigo-600 stroke-[1.5]" />
           </div>
-          <h1 className="text-[28px] font-[600] text-gray-900 tracking-tight">ICS Generator</h1>
-          <p className="text-[15px] text-gray-500 mt-1">Create Apple Calendar-compatible events in seconds</p>
-        </div>
-
-        {/* AI Magic Section */}
-        <div className="bg-gradient-to-br from-[#f0f7ff] to-[#e6f0ff] rounded-3xl shadow-sm border border-[#cedef7] overflow-hidden mb-8 p-6">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-[20px]">✨</span>
-            <h2 className="text-[15px] font-[600] text-blue-900 tracking-tight">Auto-fill with AI</h2>
-          </div>
-          <p className="text-[13px] text-blue-700 mb-4">
-            Upload a flyer, invitation image, or paste an email to automatically fill out the event details.
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-indigo-900 via-slate-800 to-indigo-800 pb-2">
+            ICS Foundry
+          </h1>
+          <p className="text-[16px] text-slate-500 font-medium max-w-sm mx-auto mt-2 tracking-wide leading-relaxed">
+            The most sophisticated and accurate event generator online, powered by advanced AI extraction.
           </p>
-          
-          <div className="space-y-3">
-            <textarea
-              className="w-full px-4 py-3 rounded-xl border border-blue-200 bg-white/70 backdrop-blur-sm text-[14px] text-gray-800 placeholder-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all resize-none"
-              rows={2}
-              placeholder="Paste event text here..."
-              value={aiText}
-              onChange={(e) => setAiText(e.target.value)}
-              disabled={aiLoading}
-            />
-            
-            <div className="flex items-center gap-3">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setAiFile(e.target.files?.[0] || null)}
-                className="text-[13px] font-[500] text-blue-800 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-[13px] file:font-[600] file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 transition-colors cursor-pointer"
-                disabled={aiLoading}
-              />
-              <div className="flex-1"></div>
-              <button
-                type="button"
-                onClick={handleAIExtract}
-                disabled={aiLoading || (!aiText && !aiFile)}
-                className="px-5 py-2.5 rounded-xl bg-blue-600 text-white text-[14px] font-[600] hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-              >
-                {aiLoading ? (
-                  <>
-                    <svg className="animate-spin w-4 h-4 text-white" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                    </svg>
-                    Extracting...
-                  </>
-                ) : (
-                  "Auto-fill"
-                )}
-              </button>
+        </motion.div>
+
+        {/* AI Magic Card */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.5 }}
+          className={cn(cardStyles, "p-1.5 bg-gradient-to-br from-white/90 to-white/40")}
+        >
+          <div className="rounded-[28px] bg-indigo-50/40 p-6 md:p-8 backdrop-blur-sm border border-indigo-100/50">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg shadow-indigo-500/20">
+                <Wand2 className="w-5 h-5 text-white" />
+              </div>
+              <h2 className="text-[17px] font-bold text-indigo-950 tracking-tight">AI Event Extraction</h2>
             </div>
+            <p className="text-[14px] text-indigo-900/70 font-medium mb-6 leading-relaxed">
+              Upload an invitation image or paste the email contents, and our autonomous assistant will magically construct your perfectly formatted event instantly.
+            </p>
             
-            {aiError && (
-              <p className="text-[13px] text-red-500 font-medium mt-2">{aiError}</p>
-            )}
-            {aiFile && (
-              <p className="text-[12px] text-blue-600 mt-1">Image selected: {aiFile.name}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-
-          {/* Section: Event Details */}
-          <div className="px-6 pt-6 pb-5 border-b border-gray-50">
-            <h2 className="text-[11px] font-[600] text-gray-400 uppercase tracking-widest mb-4">Event Details</h2>
             <div className="space-y-4">
-              <div>
-                <label className={labelCls}>Title <span className="text-red-400">*</span></label>
-                <input className={inputCls} placeholder="Meeting with team" value={form.title} onChange={(e) => set("title", e.target.value)} />
+              <div className="relative group">
+                <textarea
+                  className={cn(inputStyles, "bg-white/80 focus:bg-white resize-none min-h-[96px]")}
+                  placeholder="Paste meeting details, email threads, or garbled notes here..."
+                  value={aiText} onChange={(e) => setAiText(e.target.value)} disabled={aiLoading}
+                />
               </div>
-              <div>
-                <label className={labelCls}>Description</label>
-                <textarea className={inputCls + " resize-none"} rows={3} placeholder="What's this event about?" value={form.description} onChange={(e) => set("description", e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Location</label>
-                  <input className={inputCls} placeholder="Conference Room A" value={form.location} onChange={(e) => set("location", e.target.value)} />
-                </div>
-                <div>
-                  <label className={labelCls}>URL</label>
-                  <input className={inputCls} placeholder="https://zoom.us/j/..." value={form.url} onChange={(e) => set("url", e.target.value)} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section: Date & Time */}
-          <div className="px-6 py-5 border-b border-gray-50">
-            <h2 className="text-[11px] font-[600] text-gray-400 uppercase tracking-widest mb-4">Date & Time</h2>
-
-            {/* All Day Toggle */}
-            <div className="flex items-center justify-between mb-4 bg-gray-50 rounded-2xl px-4 py-3">
-              <div>
-                <p className="text-[14px] font-[500] text-gray-800">All-day event</p>
-                <p className="text-[12px] text-gray-400">No specific start or end time</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => set("allDay", !form.allDay)}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${form.allDay ? "bg-blue-500" : "bg-gray-200"}`}
-              >
-                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${form.allDay ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className={labelCls}>Start Date <span className="text-red-400">*</span></label>
-                <input type="date" className={inputCls} value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
-              </div>
-              {!form.allDay && (
-                <div>
-                  <label className={labelCls}>Start Time <span className="text-red-400">*</span></label>
-                  <input type="time" className={inputCls} value={form.startTime} onChange={(e) => set("startTime", e.target.value)} />
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <label className={labelCls}>End Date <span className="text-red-400">*</span></label>
-                <input type="date" className={inputCls} value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
-              </div>
-              {!form.allDay && (
-                <div>
-                  <label className={labelCls}>End Time <span className="text-red-400">*</span></label>
-                  <input type="time" className={inputCls} value={form.endTime} onChange={(e) => set("endTime", e.target.value)} />
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className={labelCls}>Time Zone</label>
-              <select className={inputCls} value={form.timezone} onChange={(e) => set("timezone", e.target.value)}>
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Section: Reminders */}
-          <div className="px-6 py-5 border-b border-gray-50">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[11px] font-[600] text-gray-400 uppercase tracking-widest">Reminders</h2>
-              <button type="button" onClick={addReminder} className="flex items-center gap-1.5 text-[13px] text-blue-500 font-[500] hover:text-blue-600 transition-colors">
-                <span className="text-[18px] leading-none">+</span> Add Reminder
-              </button>
-            </div>
-            {form.reminders.length === 0 && (
-              <p className="text-[13px] text-gray-400 text-center py-3">No reminders set</p>
-            )}
-            <div className="space-y-2">
-              {form.reminders.map((r) => (
-                <div key={r.id} className="flex items-center gap-2">
-                  <select
-                    className={inputCls + " flex-1"}
-                    value={r.minutes}
-                    onChange={(e) => updateReminder(r.id, parseInt(e.target.value))}
-                  >
-                    {REMINDER_OPTIONS.map((o) => (
-                      <option key={o.minutes} value={o.minutes}>{o.label}</option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={() => removeReminder(r.id)} className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 hover:bg-red-100 transition-colors text-[18px] leading-none">
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Section: Recurrence */}
-          <div className="px-6 py-5 border-b border-gray-50">
-            <h2 className="text-[11px] font-[600] text-gray-400 uppercase tracking-widest mb-4">Recurrence</h2>
-            <div className="space-y-3">
-              <div>
-                <label className={labelCls}>Repeat</label>
-                <select
-                  className={inputCls}
-                  value={form.recurrence.freq}
-                  onChange={(e) => set("recurrence", { ...form.recurrence, freq: e.target.value as EventFormData["recurrence"]["freq"] })}
+              
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                <input
+                  type="file" ref={fileInputRef} className="hidden" accept="image/*"
+                  onChange={(e) => setAiFile(e.target.files?.[0] || null)}
+                />
+                <button
+                  type="button" disabled={aiLoading} onClick={() => fileInputRef.current?.click()}
+                  className="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-white/80 border border-indigo-100 text-indigo-700 font-semibold text-[14px] hover:bg-white hover:border-indigo-200 hover:shadow-sm transition-all shadow-[inset_0_2px_4px_rgba(255,255,255,0.5)] active:scale-[0.98]"
                 >
-                  <option value="">Does not repeat</option>
-                  <option value="DAILY">Daily</option>
-                  <option value="WEEKLY">Weekly</option>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="YEARLY">Yearly</option>
-                </select>
+                  <ImageIcon className="w-4 h-4" />
+                  {aiFile ? aiFile.name : "Attach Image"}
+                </button>
+                <button
+                  type="button" onClick={handleAIExtract} disabled={aiLoading || (!aiText && !aiFile)}
+                  className="flex-[1.5] flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-semibold text-[15px] hover:shadow-lg hover:shadow-indigo-500/30 transition-all shadow-[inset_0_1px_rgba(255,255,255,0.2)] active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
+                >
+                  {aiLoading ? (
+                    <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: "linear", duration: 1 }}>
+                      <Wand2 className="w-4 h-4 text-indigo-100" />
+                    </motion.div>
+                  ) : <Wand2 className="w-4 h-4" />}
+                  {aiLoading ? "Synthesizing..." : "Auto-Fill Event"}
+                </button>
               </div>
-
-              {form.recurrence.freq && (
-                <>
-                  <div>
-                    <label className={labelCls}>Every</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={1}
-                        max={999}
-                        className={inputCls + " w-24"}
-                        value={form.recurrence.interval}
-                        onChange={(e) => set("recurrence", { ...form.recurrence, interval: Math.max(1, parseInt(e.target.value) || 1) })}
-                      />
-                      <span className="text-[14px] text-gray-500">
-                        {form.recurrence.freq === "DAILY" ? "day(s)" : form.recurrence.freq === "WEEKLY" ? "week(s)" : form.recurrence.freq === "MONTHLY" ? "month(s)" : "year(s)"}
-                      </span>
-                    </div>
-                  </div>
-
-                  {form.recurrence.freq === "WEEKLY" && (
-                    <div>
-                      <label className={labelCls}>On days</label>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {DAYS_OF_WEEK.map((d) => (
-                          <button
-                            key={d.value}
-                            type="button"
-                            onClick={() => toggleByDay(d.value)}
-                            className={`px-3 py-1.5 rounded-lg text-[13px] font-[500] transition-colors ${
-                              (form.recurrence.byDay || []).includes(d.value)
-                                ? "bg-blue-500 text-white"
-                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                            }`}
-                          >
-                            {d.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelCls}>End after (occurrences)</label>
-                      <input
-                        type="number"
-                        min={1}
-                        placeholder="Unlimited"
-                        className={inputCls}
-                        value={form.recurrence.count || ""}
-                        onChange={(e) => set("recurrence", { ...form.recurrence, count: e.target.value ? parseInt(e.target.value) : undefined, until: undefined })}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelCls}>End by date</label>
-                      <input
-                        type="date"
-                        className={inputCls}
-                        value={form.recurrence.until || ""}
-                        onChange={(e) => set("recurrence", { ...form.recurrence, until: e.target.value, count: undefined })}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Exclusion Dates */}
-                  <div>
-                    <label className={labelCls}>Exclude dates (exceptions)</label>
-                    <div className="flex gap-2 mb-2">
-                      <input
-                        type="date"
-                        className={inputCls + " flex-1"}
-                        value={newExdate}
-                        onChange={(e) => setNewExdate(e.target.value)}
-                      />
-                      <button type="button" onClick={addExdate} className="px-3 py-2 rounded-xl bg-gray-100 text-gray-600 text-[13px] font-[500] hover:bg-gray-200 transition-colors flex-shrink-0">
-                        Add
-                      </button>
-                    </div>
-                    {form.exdates.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {form.exdates.map((d) => (
-                          <span key={d} className="flex items-center gap-1.5 px-2.5 py-1 bg-orange-50 text-orange-700 text-[12px] rounded-lg font-[500]">
-                            {d}
-                            <button type="button" onClick={() => removeExdate(d)} className="text-orange-400 hover:text-orange-600">×</button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
             </div>
           </div>
+        </motion.div>
 
-          {/* Section: Advanced (collapsible) */}
-          <div className="px-6 py-5 border-b border-gray-50">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center justify-between w-full text-left"
-            >
-              <h2 className="text-[11px] font-[600] text-gray-400 uppercase tracking-widest">Advanced Options</h2>
-              <span className={`text-gray-400 transition-transform ${showAdvanced ? "rotate-180" : ""} text-[10px]`}>▼</span>
-            </button>
-
-            {showAdvanced && (
-              <div className="mt-4 space-y-4">
+        {/* Form Container */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.6 }}
+          className={cardStyles}
+        >
+          {/* Main Content */}
+          <div className="p-6 md:p-10 space-y-12">
+            
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <FileText className="w-6 h-6 text-slate-400 stroke-[1.5]" />
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight">Core Details</h3>
+              </div>
+              <div className="space-y-5">
                 <div>
-                  <label className={labelCls}>Notes / Internal comment</label>
-                  <textarea className={inputCls + " resize-none"} rows={2} placeholder="Internal notes (not visible in Apple Calendar UI)" value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+                  <label className={labelStyles}>Event Title <span className="text-indigo-500">*</span></label>
+                  <input className={inputStyles} placeholder="E.g., Final Product Review" value={form.title} onChange={(e) => set("title", e.target.value)} />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelStyles}>Description</label>
+                  <textarea className={cn(inputStyles, "resize-none h-28")} placeholder="What's this event about?" value={form.description} onChange={(e) => set("description", e.target.value)} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className={labelCls}>Organizer Name</label>
-                    <input className={inputCls} placeholder="Jane Smith" value={form.organizer} onChange={(e) => set("organizer", e.target.value)} />
+                    <label className={labelStyles}>Location</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input className={cn(inputStyles, "pl-11")} placeholder="123 Apple Park Way" value={form.location} onChange={(e) => set("location", e.target.value)} />
+                    </div>
                   </div>
                   <div>
-                    <label className={labelCls}>Organizer Email</label>
-                    <input type="email" className={inputCls} placeholder="jane@example.com" value={form.organizerEmail} onChange={(e) => set("organizerEmail", e.target.value)} />
+                    <label className={labelStyles}>Meeting URL</label>
+                    <div className="relative">
+                      <Link2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input className={cn(inputStyles, "pl-11")} placeholder="https://zoom.us/j/..." value={form.url} onChange={(e) => set("url", e.target.value)} />
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
+
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-60"></div>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-6 h-6 text-slate-400 stroke-[1.5]" />
+                  <h3 className="text-xl font-bold text-slate-800 tracking-tight">Time Logistics</h3>
+                </div>
+                <button
+                  type="button" onClick={() => set("allDay", !form.allDay)}
+                  className="flex items-center gap-2 group"
+                >
+                  <span className="text-[13px] font-semibold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-wide">All Day</span>
+                  <div className={cn("w-12 h-6 rounded-full p-1 transition-colors duration-300", form.allDay ? "bg-indigo-500" : "bg-slate-200")}>
+                    <motion.div layout transition={{ type: "spring", stiffness: 700, damping: 30 }} className="w-4 h-4 bg-white rounded-full shadow-sm" style={{ x: form.allDay ? 24 : 0 }} />
+                  </div>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                <div className="space-y-5">
+                  <div>
+                    <label className={labelStyles}>Start Date</label>
+                    <input type="date" className={inputStyles} value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+                  </div>
+                  <AnimatePresence>
+                    {!form.allDay && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <label className={labelStyles}>Start Time</label>
+                        <input type="time" className={inputStyles} value={form.startTime} onChange={(e) => set("startTime", e.target.value)} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+                <div className="space-y-5">
+                  <div>
+                    <label className={labelStyles}>End Date</label>
+                    <input type="date" className={inputStyles} value={form.endDate} onChange={(e) => set("endDate", e.target.value)} />
+                  </div>
+                  <AnimatePresence>
+                    {!form.allDay && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                        <label className={labelStyles}>End Time</label>
+                        <input type="time" className={inputStyles} value={form.endTime} onChange={(e) => set("endTime", e.target.value)} />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <label className={labelStyles}>Time Zone Configuration</label>
+                <div className="relative">
+                  <select className={cn(inputStyles, "appearance-none pr-12 cursor-pointer")} value={form.timezone} onChange={(e) => set("timezone", e.target.value)}>
+                    <option value="">Floating (Resolves to user's device)</option>
+                    {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-60"></div>
+
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <AlertCircle className="w-6 h-6 text-slate-400 stroke-[1.5]" />
+                  <h3 className="text-xl font-bold text-slate-800 tracking-tight">Reminders</h3>
+                </div>
+                <button type="button" onClick={addReminder} className="p-2 rounded-xl bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors">
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {form.reminders.length === 0 ? (
+                  <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-[14px] text-slate-400 font-medium py-2">
+                    No alarms established for this event.
+                  </motion.p>
+                ) : (
+                  <motion.div className="space-y-3">
+                    {form.reminders.map((r) => (
+                      <motion.div key={r.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }} className="flex items-center gap-3">
+                        <div className="relative flex-1">
+                          <select
+                            className={cn(inputStyles, "appearance-none pr-10 bg-white/60 cursor-pointer py-2.5")}
+                            value={r.minutes} onChange={(e) => {
+                              set("reminders", form.reminders.map((ro) => ro.id === r.id ? { ...ro, minutes: parseInt(e.target.value) } : ro));
+                            }}
+                          >
+                            {REMINDER_OPTIONS.map((o) => <option key={o.minutes} value={o.minutes}>{o.label}</option>)}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                        <button type="button" onClick={() => removeReminder(r.id)} className="p-3 rounded-xl bg-rose-50/50 text-rose-500 hover:bg-rose-100 transition-colors">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent opacity-60"></div>
+
+            {/* Advanced Settings Toggle */}
+            <div className="pt-2">
+              <button
+                type="button" onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <Settings className="w-5 h-5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                  <span className="text-[15px] font-bold text-slate-700">Advanced Metadata & Recurrence</span>
+                </div>
+                <motion.div animate={{ rotate: showAdvanced ? 90 : 0 }} className="text-slate-400">
+                  <ChevronRight className="w-5 h-5" />
+                </motion.div>
+              </button>
+
+              <AnimatePresence>
+                {showAdvanced && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden mt-6 space-y-8 px-2"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <label className={labelStyles}>Organizer / Host</label>
+                        <div className="relative">
+                          <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input className={cn(inputStyles, "pl-11")} placeholder="Full Name" value={form.organizer} onChange={(e) => set("organizer", e.target.value)} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={labelStyles}>Organizer Email</label>
+                        <div className="relative">
+                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input type="email" className={cn(inputStyles, "pl-11")} placeholder="host@apple.com" value={form.organizerEmail} onChange={(e) => set("organizerEmail", e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className={labelStyles}>Global Internal Notes</label>
+                      <textarea className={cn(inputStyles, "resize-none h-20")} placeholder="These act as a COMMENT header inside the actual ICS file." value={form.notes} onChange={(e) => set("notes", e.target.value)} />
+                    </div>
+
+                    <div className="p-6 rounded-2xl bg-indigo-50/50 border border-indigo-100/50 space-y-6">
+                      <h4 className="text-[15px] font-bold text-indigo-900">Recurrence Configuration</h4>
+                      <div>
+                        <label className={labelStyles}>Frequency</label>
+                        <select
+                          className={cn(inputStyles, "appearance-none bg-white")}
+                          value={form.recurrence.freq}
+                          onChange={(e) => set("recurrence", { ...form.recurrence, freq: e.target.value as any })}
+                        >
+                          <option value="">Never Patterned</option>
+                          <option value="DAILY">Daily Continual</option>
+                          <option value="WEEKLY">Weekly Routine</option>
+                          <option value="MONTHLY">Monthly Refresh</option>
+                          <option value="YEARLY">Annual Cycle</option>
+                        </select>
+                      </div>
+
+                      {form.recurrence.freq && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5">
+                          {form.recurrence.freq === "WEEKLY" && (
+                            <div>
+                              <label className={labelStyles}>On specific days</label>
+                              <div className="flex flex-wrap gap-2">
+                                {DAYS_OF_WEEK.map((d) => (
+                                  <button
+                                    key={d.value} type="button"
+                                    onClick={() => {
+                                      const curr = form.recurrence.byDay || [];
+                                      const updated = curr.includes(d.value) ? curr.filter(x => x !== d.value) : [...curr, d.value];
+                                      set("recurrence", { ...form.recurrence, byDay: updated });
+                                    }}
+                                    className={cn("w-10 h-10 rounded-xl font-bold text-[13px] transition-all", 
+                                      (form.recurrence.byDay || []).includes(d.value) ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20" : "bg-white text-slate-500 hover:bg-indigo-50"
+                                    )}
+                                  >
+                                    {d.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-2 gap-5">
+                            <div>
+                              <label className={labelStyles}>End Criteria (Cycles)</label>
+                              <input type="number" min={1} placeholder="Infinite" className={cn(inputStyles, "bg-white")} value={form.recurrence.count || ""} onChange={(e) => set("recurrence", { ...form.recurrence, count: parseInt(e.target.value) || undefined, until: undefined })} />
+                            </div>
+                            <div>
+                              <label className={labelStyles}>Or End Date Boundary</label>
+                              <input type="date" className={cn(inputStyles, "bg-white")} value={form.recurrence.until || ""} onChange={(e) => set("recurrence", { ...form.recurrence, until: e.target.value, count: undefined })} />
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
-          {/* Status Message */}
-          {status && (
-            <div className={`mx-6 mt-5 px-4 py-3 rounded-2xl text-[14px] font-[500] ${
-              status.type === "success"
-                ? "bg-green-50 text-green-700 border border-green-100"
-                : "bg-red-50 text-red-600 border border-red-100"
-            }`}>
-              {status.type === "success" && <span className="mr-1.5">✓</span>}
-              {status.type === "error" && <span className="mr-1.5">⚠</span>}
-              {status.message}
-            </div>
-          )}
-
-          {/* Actions */}
-          <div className="px-6 py-5">
+          {/* Footer Action */}
+          <div className="bg-slate-50/80 p-6 md:p-8 md:px-10 border-t border-slate-100/60 sticky bottom-0 backdrop-blur-3xl z-10 flex flex-col sm:flex-row items-center justify-between gap-5">
+            <p className="text-[13px] font-medium text-slate-400">
+              Generates high-precision strict RFC 5545 payloads.
+            </p>
             <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading || !form.title.trim()}
-              className="w-full py-3.5 rounded-2xl bg-blue-500 text-white text-[16px] font-[600] hover:bg-blue-600 active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2.5"
+              type="button" onClick={handleSubmit} disabled={loading}
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-900 text-white text-[15px] font-bold hover:bg-slate-800 hover:shadow-xl hover:shadow-slate-900/10 active:scale-[0.98] disabled:opacity-60 disabled:scale-100 transition-all flex items-center justify-center gap-3"
             >
               {loading ? (
                 <>
-                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                  </svg>
-                  Generating…
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, ease: "linear", duration: 1 }} className="w-4 h-4 rounded-full border-2 border-slate-400 border-t-white" />
+                  Processing...
                 </>
               ) : (
                 <>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <path d="M8 1v9M5 7l3 3 3-3M2 12v2h12v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                  Generate & Download .ics
+                  <Download className="w-5 h-5 opacity-90" />
+                  Generate Calendar Pack
                 </>
               )}
             </button>
-            <p className="text-center text-[12px] text-gray-400 mt-3">
-              Compatible with Apple Calendar, Google Calendar, Outlook, and more
-            </p>
           </div>
-        </div>
-
-        {/* Footer */}
-        <p className="text-center text-[12px] text-gray-400 mt-6">
-          Generates RFC 5545-compliant .ics files · Works with iPhone, Mac & iPad
-        </p>
+        </motion.div>
       </div>
     </div>
   );

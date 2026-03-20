@@ -39,11 +39,14 @@ export async function POST(req: NextRequest) {
 }
 
 Parsing Rules:
+- **EXTREMELY IMPORTANT**: Think like an executive assistant. Deduce exactly what is meant even if ambiguously stated.
 - If a value cannot be found or inferred, use an empty string "" for strings, and false for booleans.
-- Dates must be in YYYY-MM-DD format. Assume the current year or next upcoming occurrence if year is omitted.
-- Times must be in 24-hour HH:mm format. If no end time, assume 1 hour after start time.
+- Dates must be in YYYY-MM-DD format. If a year is omitted (e.g., "Friday, October 12th"), calculate the closest UPCOMING occurrence of that date from the current date context.
+- Times must be in 24-hour HH:mm format. 
+- **Duration/End Time**: If an end time is not explicitly stated, calculate a logical end time based on the event context. (e.g., A "Dinner" is usually 2 hours, a "Quick sync" is 30 mins, a "Concert" is 3 hours). If completely unknown, default to 1 hour after start time.
 - If only one date is given, use it for both startDate and endDate.
-- For timezone, if you detect a specific location or timezone, infer the IANA timezone if possible (e.g. America/Los_Angeles). Otherwise use an empty string.`
+- **Timezone Inference**: If a physical location or city is provided (like "San Francisco" or "London"), you MUST output the exact IANA Timezone string for that location (e.g., "America/Los_Angeles" or "Europe/London"). If absolute certainty is impossible, leave as an empty string.
+- Automatically format URLs properly (ensure they start with http/https).`
       }
     ];
 
