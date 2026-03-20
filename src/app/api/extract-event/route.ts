@@ -13,10 +13,10 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData();
     const text = formData.get("text") as string | null;
-    const file = formData.get("image") as File | null;
+    const files = formData.getAll("images") as File[];
 
-    if (!text && !file) {
-      return NextResponse.json({ error: "Please provide either text or an image to extract from." }, { status: 400 });
+    if (!text && files.length === 0) {
+      return NextResponse.json({ error: "Please provide either text or images to extract from." }, { status: 400 });
     }
 
     const now = new Date();
@@ -63,7 +63,7 @@ Parsing Rules:
       userContent.push({ type: "text", text: "Text to parse:\n" + text });
     }
 
-    if (file) {
+    for (const file of files) {
       const arrayBuffer = await file.arrayBuffer();
       const base64Data = Buffer.from(arrayBuffer).toString("base64");
       const dataUri = `data:${file.type};base64,${base64Data}`;

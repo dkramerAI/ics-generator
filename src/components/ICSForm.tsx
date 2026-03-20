@@ -101,7 +101,7 @@ export default function ICSForm() {
   // AI Extraction State
   const [aiLoading, setAiLoading] = useState(false);
   const [aiText, setAiText] = useState("");
-  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiFiles, setAiFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = useCallback(<K extends keyof EventFormData>(key: K, value: EventFormData[K]) => {
@@ -113,13 +113,13 @@ export default function ICSForm() {
   }, [activeIndex]);
 
   const handleAIExtract = async () => {
-    if (!aiText && !aiFile) return;
+    if (!aiText && aiFiles.length === 0) return;
     setAiLoading(true);
 
     try {
       const formData = new FormData();
       if (aiText) formData.append("text", aiText);
-      if (aiFile) formData.append("image", aiFile);
+      aiFiles.forEach(f => formData.append("images", f));
       
       const res = await fetch("/api/extract-event", {
         method: "POST", body: formData,
@@ -164,7 +164,7 @@ export default function ICSForm() {
         toast.error("No events could be deciphered.");
       }
       setAiText("");
-      setAiFile(null);
+      setAiFiles([]);
     } catch (err: any) {
       toast.error(err.message, { icon: <AlertCircle className="w-5 h-5 text-red-500" /> });
     } finally {
@@ -274,18 +274,20 @@ export default function ICSForm() {
               
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                 <input
-                  type="file" ref={fileInputRef} className="hidden" accept="image/*"
-                  onChange={(e) => setAiFile(e.target.files?.[0] || null)}
+                  type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple
+                  onChange={(e) => {
+                    if (e.target.files) setAiFiles(Array.from(e.target.files));
+                  }}
                 />
                 <button
                   type="button" disabled={aiLoading} onClick={() => fileInputRef.current?.click()}
                   className="flex-1 flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl bg-white/80 border border-indigo-100 text-indigo-700 font-semibold text-[14px] hover:bg-white hover:border-indigo-200 hover:shadow-sm transition-all shadow-[inset_0_2px_4px_rgba(255,255,255,0.5)] active:scale-[0.98]"
                 >
                   <ImageIcon className="w-4 h-4" />
-                  {aiFile ? aiFile.name : "Attach Image"}
+                  {aiFiles.length > 0 ? `${aiFiles.length} Images Selected` : "Attach Images"}
                 </button>
                 <button
-                  type="button" onClick={handleAIExtract} disabled={aiLoading || (!aiText && !aiFile)}
+                  type="button" onClick={handleAIExtract} disabled={aiLoading || (!aiText && aiFiles.length === 0)}
                   className="flex-[1.5] flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-600 text-white font-semibold text-[15px] hover:shadow-lg hover:shadow-indigo-500/30 transition-all shadow-[inset_0_1px_rgba(255,255,255,0.2)] active:scale-[0.98] disabled:opacity-50 disabled:grayscale"
                 >
                   {aiLoading ? (
