@@ -60,7 +60,13 @@ const NTH_OPTIONS = [
 const STANDARD_REMINDER_PRESET = [60, 1440];
 
 type InsightSource = "manual" | "ai" | "import" | "template";
-type UiTheme = "previous" | "current";
+type UiTheme = "previous" | "current" | "chatgpt";
+
+const THEME_LABELS: Record<UiTheme, string> = {
+  previous: "Previous (Original)",
+  current: "Current (Sky)",
+  chatgpt: "ChatGPT (Green)",
+};
 
 const UI_THEME_STYLES: Record<
   UiTheme,
@@ -102,6 +108,19 @@ const UI_THEME_STYLES: Record<
     extractorIconGradient: "from-indigo-500 to-sky-600",
     primaryButtonGradient: "from-indigo-600 to-sky-600",
     progressGradient: "from-indigo-500 to-sky-500",
+  },
+  chatgpt: {
+    pageGradient:
+      "from-emerald-50/80 via-slate-50 to-zinc-50 dark:from-zinc-950 dark:via-slate-900 dark:to-zinc-900",
+    blobOne: "bg-emerald-200 dark:bg-emerald-900",
+    blobTwo: "bg-teal-200 dark:bg-teal-900",
+    blobThree: "bg-slate-300 dark:bg-slate-800",
+    titleGradient: "from-emerald-900 via-slate-800 to-teal-800 dark:from-zinc-100 dark:via-emerald-300 dark:to-teal-300",
+    headerIconColor: "text-emerald-600 dark:text-emerald-300",
+    aiPanelSurface: "bg-emerald-50/45 dark:bg-zinc-900/65 border-emerald-100/60 dark:border-zinc-700/70",
+    extractorIconGradient: "from-emerald-500 to-teal-600",
+    primaryButtonGradient: "from-emerald-600 to-teal-600",
+    progressGradient: "from-emerald-500 to-teal-500",
   },
 };
 
@@ -342,7 +361,7 @@ export default function ICSForm() {
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("ics_ui_theme");
-    if (savedTheme === "previous" || savedTheme === "current") {
+    if (savedTheme === "previous" || savedTheme === "current" || savedTheme === "chatgpt") {
       setUiTheme(savedTheme);
     }
   }, []);
@@ -503,7 +522,7 @@ export default function ICSForm() {
   const saveTheme = (theme: UiTheme) => {
     setUiTheme(theme);
     localStorage.setItem("ics_ui_theme", theme);
-    toast.success(`Theme set to ${theme === "previous" ? "Previous" : "Current"}.`);
+    toast.success(`Theme set to ${THEME_LABELS[theme]}.`);
   };
 
   const saveTemplatesToStorage = (nextTemplates: EventTemplate[]) => {
@@ -1089,7 +1108,7 @@ export default function ICSForm() {
             AI-assisted event extraction with premium editing controls, live preview, and RFC 5545-safe exports.
           </p>
           <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-400 mt-2">
-            Theme: {uiTheme === "previous" ? "Previous" : "Current"}
+            Theme: {THEME_LABELS[uiTheme]}
           </p>
         </motion.div>
 
@@ -2013,7 +2032,7 @@ export default function ICSForm() {
               <div className="space-y-6">
                 <div className="space-y-3">
                   <label className={labelStyles}>Theme</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => saveTheme("previous")}
@@ -2024,7 +2043,7 @@ export default function ICSForm() {
                           : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
                       )}
                     >
-                      Previous
+                      Previous (Original)
                     </button>
                     <button
                       type="button"
@@ -2036,11 +2055,23 @@ export default function ICSForm() {
                           : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
                       )}
                     >
-                      Current
+                      Current (Sky)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveTheme("chatgpt")}
+                      className={cn(
+                        "px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors",
+                        uiTheme === "chatgpt"
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
+                      )}
+                    >
+                      ChatGPT (Green)
                     </button>
                   </div>
                   <p className="text-[12px] text-slate-500 dark:text-slate-300">
-                    Default starts on Previous theme.
+                    Default starts on Previous (Original) theme.
                   </p>
                 </div>
 
