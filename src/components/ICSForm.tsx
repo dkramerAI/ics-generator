@@ -2013,7 +2013,7 @@ export default function ICSForm() {
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-[32px] p-8 w-full max-w-md shadow-2xl border border-white/60 dark:border-slate-700/60 relative z-10"
+              className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl rounded-[32px] p-8 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-white/60 dark:border-slate-700/60 relative z-10"
             >
               <button
                 onClick={() => setShowSettings(false)}
