@@ -69,6 +69,9 @@ const UI_THEME_STYLES: Record<
     blobOne: string;
     blobTwo: string;
     blobThree: string;
+    titleGradient: string;
+    headerIconColor: string;
+    aiPanelSurface: string;
     extractorIconGradient: string;
     primaryButtonGradient: string;
     progressGradient: string;
@@ -80,16 +83,22 @@ const UI_THEME_STYLES: Record<
     blobOne: "bg-indigo-200 dark:bg-indigo-900",
     blobTwo: "bg-purple-200 dark:bg-purple-900",
     blobThree: "bg-rose-200 dark:bg-rose-900",
+    titleGradient: "from-indigo-900 via-slate-800 to-purple-800 dark:from-slate-100 dark:via-slate-300 dark:to-indigo-300",
+    headerIconColor: "text-indigo-600 dark:text-indigo-300",
+    aiPanelSurface: "bg-indigo-50/40 dark:bg-slate-900/60 border-indigo-100/50 dark:border-slate-700/60",
     extractorIconGradient: "from-indigo-500 to-purple-600",
     primaryButtonGradient: "from-indigo-600 to-purple-600",
     progressGradient: "from-indigo-500 to-purple-500",
   },
   current: {
     pageGradient:
-      "from-indigo-50/50 via-slate-50 to-rose-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
-    blobOne: "bg-indigo-200 dark:bg-indigo-900",
-    blobTwo: "bg-rose-200 dark:bg-sky-900",
-    blobThree: "bg-cyan-200 dark:bg-purple-900",
+      "from-sky-50/70 via-cyan-50/70 to-indigo-50/60 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+    blobOne: "bg-sky-200 dark:bg-sky-900",
+    blobTwo: "bg-cyan-200 dark:bg-cyan-900",
+    blobThree: "bg-indigo-200 dark:bg-indigo-900",
+    titleGradient: "from-sky-900 via-blue-800 to-indigo-800 dark:from-slate-100 dark:via-sky-300 dark:to-indigo-300",
+    headerIconColor: "text-sky-600 dark:text-sky-300",
+    aiPanelSurface: "bg-sky-50/45 dark:bg-slate-900/60 border-sky-100/60 dark:border-slate-700/60",
     extractorIconGradient: "from-indigo-500 to-sky-600",
     primaryButtonGradient: "from-indigo-600 to-sky-600",
     progressGradient: "from-indigo-500 to-sky-500",
@@ -494,6 +503,7 @@ export default function ICSForm() {
   const saveTheme = (theme: UiTheme) => {
     setUiTheme(theme);
     localStorage.setItem("ics_ui_theme", theme);
+    toast.success(`Theme set to ${theme === "previous" ? "Previous" : "Current"}.`);
   };
 
   const saveTemplatesToStorage = (nextTemplates: EventTemplate[]) => {
@@ -1064,14 +1074,22 @@ export default function ICSForm() {
           </button>
 
           <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-white/60 dark:bg-slate-800/70 shadow-[0_8px_16px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,1)] border border-white/50 dark:border-slate-700/80 backdrop-blur-xl mb-6 mt-4 md:mt-0">
-            <CalendarDays className="w-10 h-10 text-indigo-600 dark:text-indigo-300 stroke-[1.5]" />
+            <CalendarDays className={cn("w-10 h-10 stroke-[1.5]", themeStyles.headerIconColor)} />
           </div>
 
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-indigo-900 via-slate-800 to-indigo-800 dark:from-slate-100 dark:via-slate-300 dark:to-indigo-300 pb-2">
+          <h1
+            className={cn(
+              "text-4xl md:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-br pb-2",
+              themeStyles.titleGradient,
+            )}
+          >
             ICS Foundry
           </h1>
           <p className="text-[16px] text-slate-500 dark:text-slate-300 font-medium max-w-xl mx-auto mt-2 tracking-wide leading-relaxed">
             AI-assisted event extraction with premium editing controls, live preview, and RFC 5545-safe exports.
+          </p>
+          <p className="text-[12px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-400 mt-2">
+            Theme: {uiTheme === "previous" ? "Previous" : "Current"}
           </p>
         </motion.div>
 
@@ -1083,7 +1101,7 @@ export default function ICSForm() {
               transition={{ delay: 0.2, duration: 0.5 }}
               className={cn(cardStyles, "p-1.5 bg-gradient-to-br from-white/90 to-white/40 dark:from-slate-900/70 dark:to-slate-900/30")}
             >
-              <div className="rounded-[28px] bg-indigo-50/40 dark:bg-slate-900/60 p-6 md:p-8 backdrop-blur-sm border border-indigo-100/50 dark:border-slate-700/60 space-y-6">
+              <div className={cn("rounded-[28px] p-6 md:p-8 backdrop-blur-sm border space-y-6", themeStyles.aiPanelSurface)}>
                 <div className="flex items-center gap-3">
                   <div className={cn("p-2.5 bg-gradient-to-br rounded-xl shadow-lg shadow-indigo-500/20", themeStyles.extractorIconGradient)}>
                     <Wand2 className="w-5 h-5 text-white" />
