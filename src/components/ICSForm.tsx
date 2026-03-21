@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { EventFormData, Reminder, TIMEZONES, REMINDER_OPTIONS } from "@/types/event";
-import { parseNaturalLanguageEvent } from "@/lib/natural-language";
 import { summarizeRecurrence, summarizeReminders } from "@/lib/event-format";
 import { parseICSContent } from "@/lib/ics-import";
 import { formatDisplayDateTime } from "@/lib/time";
@@ -60,7 +59,7 @@ const NTH_OPTIONS = [
 
 const STANDARD_REMINDER_PRESET = [60, 1440];
 
-type InsightSource = "manual" | "ai" | "quick" | "import" | "template";
+type InsightSource = "manual" | "ai" | "import" | "template";
 
 type InsightField =
   | "title"
@@ -164,12 +163,21 @@ function makeReminder(minutes: number): Reminder {
   return { id: Math.random().toString(36).slice(2), minutes };
 }
 
-function createDefaultEvent(defaultTimezone?: string, defaultReminderMinutes: number[] = []): EventFormData {
+function timezoneToLocationFallback(timezone: string): string {
+  const city = timezone?.split("/")[1] || "";
+  return city.replace(/_/g, " ").trim();
+}
+
+function createDefaultEvent(
+  defaultTimezone?: string,
+  defaultReminderMinutes: number[] = [],
+  defaultLocation?: string,
+): EventFormData {
   const dates = getDefaultDates();
   return {
     title: "",
     description: "",
-    location: "",
+    location: defaultLocation || "",
     url: "",
     notes: "",
     organizer: "",
@@ -229,8 +237,9 @@ function buildEventFromPartial(
   partial: Partial<EventFormData>,
   defaultTimezone?: string,
   defaultReminderMinutes: number[] = [],
+  defaultLocation?: string,
 ): EventFormData {
-  const base = createDefaultEvent(defaultTimezone, defaultReminderMinutes);
+  const base = createDefaultEvent(defaultTimezone, defaultReminderMinutes, defaultLocation);
 
   return {
     ...base,
@@ -268,6 +277,7 @@ export default function ICSForm() {
   const [showSettings, setShowSettings] = useState(false);
   const [defaultReminders, setDefaultReminders] = useState<number[]>([]);
   const [defaultTimezone, setDefaultTimezone] = useState<string>("");
+  const [defaultLocation, setDefaultLocation] = useState<string>("");
 
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -276,12 +286,6 @@ export default function ICSForm() {
   const [aiProgress, setAiProgress] = useState({ percent: 0, label: "" });
   const [aiText, setAiText] = useState("");
   const [aiFiles, setAiFiles] = useState<File[]>([]);
-  const [quickAddText, setQuickAddText] = useState("");
-  const [quickAddFeedback, setQuickAddFeedback] = useState<{
-    confidence: number;
-    lowConfidenceFields: string[];
-    warning?: string;
-  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -292,32 +296,84 @@ export default function ICSForm() {
 
   useEffect(() => {
     const savedDefaults = localStorage.getItem("ics_defaults");
+    const detectedTimezone = deviceTimezone;
+    const detectedLocation = timezoneToLocationFallback(detectedTimezone);
     if (savedDefaults) {
       try {
         const parsed = JSON.parse(savedDefaults);
         const reminders = Array.isArray(parsed.reminders) ? parsed.reminders : STANDARD_REMINDER_PRESET;
-        const timezone = typeof parsed.timezone === "string" ? parsed.timezone : "";
+        const timezone = typeof parsed.timezone === "string" && parsed.timezone ? parsed.timezone : detectedTimezone;
+        const location = typeof parsed.location === "string" && parsed.location ? parsed.location : detectedLocation;
         setDefaultReminders(reminders);
         setDefaultTimezone(timezone);
+        setDefaultLocation(location);
         setEvents((prev) =>
           prev.map((event) => ({
             ...event,
             timezone: timezone || event.timezone,
+            location: event.location || location,
             reminders: reminders.map((minutes: number) => makeReminder(minutes)),
           })),
         );
       } catch {
         setDefaultReminders(STANDARD_REMINDER_PRESET);
+        setDefaultTimezone(detectedTimezone);
+        setDefaultLocation(detectedLocation);
       }
     } else {
       setDefaultReminders(STANDARD_REMINDER_PRESET);
+      setDefaultTimezone(detectedTimezone);
+      setDefaultLocation(detectedLocation);
       setEvents((prev) =>
         prev.map((event) => ({
           ...event,
+          timezone: event.timezone || detectedTimezone,
+          location: event.location || detectedLocation,
           reminders: STANDARD_REMINDER_PRESET.map((minutes) => makeReminder(minutes)),
         })),
       );
     }
+  }, [deviceTimezone]);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    let ignore = false;
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        if (ignore) return;
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${coords.latitude}&lon=${coords.longitude}`,
+          );
+          if (!response.ok) return;
+          const data = await response.json();
+          const address = data?.address || {};
+          const city = address.city || address.town || address.village || address.hamlet || address.county || "";
+          const state = address.state || address.region || "";
+          const country = address.country_code ? String(address.country_code).toUpperCase() : address.country || "";
+          const location = [city, state || country].filter(Boolean).join(", ").trim();
+          if (!location) return;
+
+          setDefaultLocation((prev) => prev || location);
+          setEvents((prev) =>
+            prev.map((event) => ({
+              ...event,
+              location: event.location || location,
+            })),
+          );
+        } catch {
+          // Ignore geolocation lookup failures and keep fallback location.
+        }
+      },
+      () => {
+        // Ignore denied location permissions and keep fallback location.
+      },
+      { timeout: 7000, maximumAge: 300000 },
+    );
+
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -379,10 +435,15 @@ export default function ICSForm() {
     }
   }, [events.length, eventInsights.length, editedFields.length, activeIndex]);
 
-  const saveDefaults = (reminders: number[], timezone: string = defaultTimezone) => {
+  const saveDefaults = (
+    reminders: number[],
+    timezone: string = defaultTimezone,
+    location: string = defaultLocation,
+  ) => {
     setDefaultReminders(reminders);
     setDefaultTimezone(timezone);
-    localStorage.setItem("ics_defaults", JSON.stringify({ reminders, timezone }));
+    setDefaultLocation(location);
+    localStorage.setItem("ics_defaults", JSON.stringify({ reminders, timezone, location }));
     toast.success("Default settings saved.");
   };
 
@@ -505,7 +566,12 @@ export default function ICSForm() {
 
   const appendEvent = useCallback(
     (partial?: Partial<EventFormData>, metadata?: ApplyMetadata) => {
-      const newEvent = buildEventFromPartial(partial || {}, defaultTimezone || undefined, defaultReminders);
+      const newEvent = buildEventFromPartial(
+        partial || {},
+        defaultTimezone || undefined,
+        defaultReminders,
+        defaultLocation || undefined,
+      );
       const newInsight: EventInsight = {
         ...buildBlankInsight(),
         source: metadata?.source || "manual",
@@ -520,7 +586,7 @@ export default function ICSForm() {
       setEditedFields((prev) => [...prev, {}]);
       setEventInsights((prev) => [...prev, newInsight]);
     },
-    [defaultTimezone, defaultReminders],
+    [defaultTimezone, defaultReminders, defaultLocation],
   );
 
   const removeEvent = (index: number) => {
@@ -636,41 +702,6 @@ export default function ICSForm() {
     saveTemplatesToStorage(next);
     setSelectedTemplateId(template.id);
     toast.success("Template saved.");
-  };
-
-  const handleQuickAdd = () => {
-    if (!quickAddText.trim()) return;
-
-    const parsed = parseNaturalLanguageEvent(quickAddText, new Date());
-    const confidenceMap: Partial<Record<InsightField, number>> = {};
-    for (const [key, value] of Object.entries(parsed.fields)) {
-      confidenceMap[key as InsightField] = value;
-    }
-
-    const applied = applyPartialToEvent(activeIndex, parsed.partial, {
-      source: "quick",
-      confidenceByField: confidenceMap,
-      lowConfidenceFields: parsed.lowConfidenceFields as InsightField[],
-      timezoneWarning: parsed.timezoneWarning,
-      overallConfidence: parsed.confidence,
-    });
-
-    setQuickAddFeedback({
-      confidence: parsed.confidence,
-      lowConfidenceFields: parsed.lowConfidenceFields,
-      warning: parsed.timezoneWarning,
-    });
-
-    if (applied.length === 0) {
-      toast.info("Quick Add found details, but no fields were updated.");
-      return;
-    }
-
-    if (parsed.lowConfidenceFields.length > 0) {
-      toast.warning("Quick Add applied. Review highlighted fields.");
-    } else {
-      toast.success("Quick Add parsed and applied.");
-    }
   };
 
   const handleAIExtract = async () => {
@@ -839,25 +870,6 @@ export default function ICSForm() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadCurrentEvent = async (index: number) => {
-    const selected = events[index];
-    if (!selected.title?.trim()) {
-      setActiveIndex(index);
-      toast.error("Event title is required before download.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await downloadEvents([selected], selected.title);
-      toast.success("Single event downloaded.");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to download event.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async () => {
     const invalidIndex = events.findIndex((event) => !event.title?.trim());
     if (invalidIndex !== -1) {
@@ -1008,55 +1020,6 @@ export default function ICSForm() {
                     <Wand2 className="w-5 h-5 text-white" />
                   </div>
                   <h2 className="text-[17px] font-bold text-indigo-950 dark:text-slate-100 tracking-tight">AI Event Extraction</h2>
-                </div>
-
-                <div className="space-y-3">
-                  <label className={labelStyles}>Quick Add (Natural Language)</label>
-                  <div className="flex flex-col md:flex-row gap-3">
-                    <input
-                      className={cn(inputStyles, "flex-1", getFieldClass("title"))}
-                      placeholder='Examples: "Meeting tomorrow at 3pm" or "Clinical every Monday at 6am"'
-                      value={quickAddText}
-                      onChange={(event) => setQuickAddText(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          handleQuickAdd();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleQuickAdd}
-                      disabled={!quickAddText.trim()}
-                      className="px-5 py-3.5 rounded-2xl bg-white/80 dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 text-indigo-700 dark:text-indigo-300 font-semibold text-[14px] hover:bg-white dark:hover:bg-slate-700 transition-all disabled:opacity-50"
-                    >
-                      Parse
-                    </button>
-                  </div>
-
-                  <AnimatePresence>
-                    {quickAddFeedback && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -8 }}
-                        className="text-[13px] text-slate-600 dark:text-slate-300"
-                      >
-                        <span className={cn("font-semibold", confidenceTone(quickAddFeedback.confidence))}>
-                          Confidence {Math.round(quickAddFeedback.confidence * 100)}%
-                        </span>
-                        {quickAddFeedback.lowConfidenceFields.length > 0 && (
-                          <span className="ml-2 text-amber-600 dark:text-amber-400">
-                            Review: {quickAddFeedback.lowConfidenceFields.join(", ")}
-                          </span>
-                        )}
-                        {quickAddFeedback.warning && (
-                          <p className="text-amber-600 dark:text-amber-400 mt-1">{quickAddFeedback.warning}</p>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
 
                 <div className="space-y-4">
@@ -1803,34 +1766,24 @@ export default function ICSForm() {
 
               <div className="bg-slate-50/80 dark:bg-slate-900/80 p-6 md:p-8 md:px-10 border-t border-slate-100/60 dark:border-slate-700/60 sticky bottom-0 backdrop-blur-3xl z-10 flex flex-col sm:flex-row items-center justify-between gap-5">
                 <p className="text-[13px] font-medium text-slate-400 dark:text-slate-300">Generates strict RFC 5545 payloads.</p>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => downloadCurrentEvent(activeIndex)}
-                    disabled={loading}
-                    className="flex-1 sm:flex-initial px-5 py-4 rounded-2xl bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700 text-[14px] font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-all"
-                  >
-                    Current Event
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="flex-1 sm:flex-initial px-8 py-4 rounded-2xl bg-slate-900 text-white text-[15px] font-bold hover:bg-slate-800 active:scale-[0.98] disabled:opacity-60 transition-all flex items-center justify-center gap-3"
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="w-5 h-5 opacity-90" />
-                        Generate Calendar Pack
-                      </>
-                    )}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-slate-900 text-white text-[15px] font-bold hover:bg-slate-800 active:scale-[0.98] disabled:opacity-60 transition-all flex items-center justify-center gap-3"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5 opacity-90" />
+                      Generate Calendar Pack
+                    </>
+                  )}
+                </button>
               </div>
             </motion.div>
           </div>
@@ -1873,39 +1826,20 @@ export default function ICSForm() {
                           ? `${Math.round((eventInsights[idx]?.overallConfidence || 0) * 100)}% confidence`
                           : "Manual"}
                       </span>
-                      <div className="flex items-center gap-1">
+                      {events.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => downloadCurrentEvent(idx)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-700 transition-colors"
-                          title="Download this event"
+                          onClick={() => removeEvent(idx)}
+                          className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors"
+                          title="Remove"
                         >
-                          <Download className="w-3.5 h-3.5" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
-                        {events.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeEvent(idx)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors"
-                            title="Remove"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
-
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading || events.length === 0}
-                className="mt-4 w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-900 text-white text-[13px] font-bold hover:bg-slate-800 transition-all disabled:opacity-50"
-              >
-                <Download className="w-4 h-4" /> Download All ({events.length})
-              </button>
             </motion.div>
 
             <motion.div
@@ -2007,6 +1941,19 @@ export default function ICSForm() {
                     </select>
                     <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
+                </div>
+
+                <div className="space-y-3">
+                  <label className={labelStyles}>Default Location</label>
+                  <input
+                    className={cn(inputStyles, "bg-white/60 dark:bg-slate-800/70")}
+                    placeholder="Auto-detected from your device location"
+                    value={defaultLocation}
+                    onChange={(event) => saveDefaults(defaultReminders, defaultTimezone, event.target.value)}
+                  />
+                  <p className="text-[12px] text-slate-500 dark:text-slate-300">
+                    Used for new events when location is empty.
+                  </p>
                 </div>
 
                 <div className="pt-2">
