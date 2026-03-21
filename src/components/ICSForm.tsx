@@ -120,6 +120,8 @@ export default function ICSForm() {
       const formData = new FormData();
       if (aiText) formData.append("text", aiText);
       aiFiles.forEach(f => formData.append("images", f));
+      formData.append("localDate", new Date().toString());
+      formData.append("localTimezone", Intl.DateTimeFormat().resolvedOptions().timeZone);
       
       const res = await fetch("/api/extract-event", {
         method: "POST", body: formData,

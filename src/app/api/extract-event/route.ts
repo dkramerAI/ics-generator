@@ -14,12 +14,13 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const text = formData.get("text") as string | null;
     const files = formData.getAll("images") as File[];
+    const localDate = formData.get("localDate") as string || new Date().toString();
+    const localTimezone = formData.get("localTimezone") as string || "UTC";
 
     if (!text && files.length === 0) {
       return NextResponse.json({ error: "Please provide either text or images to extract from." }, { status: 400 });
     }
 
-    const now = new Date();
     const messages: any[] = [
       {
         role: "system",
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 Parsing Rules:
 - **EXTREMELY IMPORTANT**: Think like an executive assistant. Deduce exactly what is meant even if ambiguously stated.
 - **ARRAY PROCESSING**: If the text contains multiple distinct events, appointments, shifts, or dates, you MUST process every single one and output them as separate objects inside the \`events\` array. Do NOT combine them into one long string.
-- **CURRENT DATE/TIME CONTEXT**: The current date and time right now is ${now.toISOString()} (UTC). You MUST use this exact moment as "today" or "now" to correctly calculate relative dates like "tomorrow", "tonight", "this weekend", or "next Friday".
+- **RELATIVE DATE ANCHORING**: The User's absolute current exact local date/time is: \`${localDate}\`. The User's exact local timezone is \`${localTimezone}\`. You **MUST** use this precise timestamp as "Right Now / Today" so that references like "tomorrow", "tonight", "this weekend", or "next Friday" are calculated with mathematical perfection relative to their actual local reality, NOT UTC server time.
 - If a value cannot be found or inferred, use an empty string "" for strings, and false for booleans.
 - Dates must be in YYYY-MM-DD format. If a year is omitted (e.g., "Friday, October 12th"), calculate the closest UPCOMING occurrence of that date from the current date context.
 - Times must be in 24-hour HH:mm format. 
