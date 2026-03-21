@@ -60,6 +60,41 @@ const NTH_OPTIONS = [
 const STANDARD_REMINDER_PRESET = [60, 1440];
 
 type InsightSource = "manual" | "ai" | "import" | "template";
+type UiTheme = "previous" | "current";
+
+const UI_THEME_STYLES: Record<
+  UiTheme,
+  {
+    pageGradient: string;
+    blobOne: string;
+    blobTwo: string;
+    blobThree: string;
+    extractorIconGradient: string;
+    primaryButtonGradient: string;
+    progressGradient: string;
+  }
+> = {
+  previous: {
+    pageGradient:
+      "from-indigo-50/50 via-slate-50 to-rose-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+    blobOne: "bg-indigo-200 dark:bg-indigo-900",
+    blobTwo: "bg-purple-200 dark:bg-purple-900",
+    blobThree: "bg-rose-200 dark:bg-rose-900",
+    extractorIconGradient: "from-indigo-500 to-purple-600",
+    primaryButtonGradient: "from-indigo-600 to-purple-600",
+    progressGradient: "from-indigo-500 to-purple-500",
+  },
+  current: {
+    pageGradient:
+      "from-indigo-50/50 via-slate-50 to-rose-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+    blobOne: "bg-indigo-200 dark:bg-indigo-900",
+    blobTwo: "bg-rose-200 dark:bg-sky-900",
+    blobThree: "bg-cyan-200 dark:bg-purple-900",
+    extractorIconGradient: "from-indigo-500 to-sky-600",
+    primaryButtonGradient: "from-indigo-600 to-sky-600",
+    progressGradient: "from-indigo-500 to-sky-500",
+  },
+};
 
 type InsightField =
   | "title"
@@ -278,6 +313,7 @@ export default function ICSForm() {
   const [defaultReminders, setDefaultReminders] = useState<number[]>([]);
   const [defaultTimezone, setDefaultTimezone] = useState<string>("");
   const [defaultLocation, setDefaultLocation] = useState<string>("");
+  const [uiTheme, setUiTheme] = useState<UiTheme>("previous");
 
   const [templates, setTemplates] = useState<EventTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -293,6 +329,14 @@ export default function ICSForm() {
   const form = events[activeIndex] || events[0];
   const insight = eventInsights[activeIndex] || buildBlankInsight();
   const deviceTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const themeStyles = UI_THEME_STYLES[uiTheme];
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("ics_ui_theme");
+    if (savedTheme === "previous" || savedTheme === "current") {
+      setUiTheme(savedTheme);
+    }
+  }, []);
 
   useEffect(() => {
     const savedDefaults = localStorage.getItem("ics_defaults");
@@ -445,6 +489,11 @@ export default function ICSForm() {
     setDefaultLocation(location);
     localStorage.setItem("ics_defaults", JSON.stringify({ reminders, timezone, location }));
     toast.success("Default settings saved.");
+  };
+
+  const saveTheme = (theme: UiTheme) => {
+    setUiTheme(theme);
+    localStorage.setItem("ics_ui_theme", theme);
   };
 
   const saveTemplatesToStorage = (nextTemplates: EventTemplate[]) => {
@@ -971,11 +1020,31 @@ export default function ICSForm() {
       : "monthDay";
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50/50 via-slate-50 to-rose-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-10 px-5 sm:px-8 font-sans antialiased text-slate-800 dark:text-slate-100 relative z-0 selection:bg-indigo-200">
+    <div
+      className={cn(
+        "min-h-screen bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] py-10 px-5 sm:px-8 font-sans antialiased text-slate-800 dark:text-slate-100 relative z-0 selection:bg-indigo-200",
+        themeStyles.pageGradient,
+      )}
+    >
       <div className="absolute inset-0 z-[-1] overflow-hidden opacity-40 pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-200 dark:bg-indigo-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob" />
-        <div className="absolute top-40 -left-20 w-72 h-72 bg-rose-200 dark:bg-sky-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000" />
-        <div className="absolute -bottom-40 right-20 w-80 h-80 bg-cyan-200 dark:bg-purple-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000" />
+        <div
+          className={cn(
+            "absolute -top-40 -right-40 w-96 h-96 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob",
+            themeStyles.blobOne,
+          )}
+        />
+        <div
+          className={cn(
+            "absolute top-40 -left-20 w-72 h-72 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000",
+            themeStyles.blobTwo,
+          )}
+        />
+        <div
+          className={cn(
+            "absolute -bottom-40 right-20 w-80 h-80 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000",
+            themeStyles.blobThree,
+          )}
+        />
       </div>
 
       <div className="max-w-7xl mx-auto space-y-8">
@@ -1016,7 +1085,7 @@ export default function ICSForm() {
             >
               <div className="rounded-[28px] bg-indigo-50/40 dark:bg-slate-900/60 p-6 md:p-8 backdrop-blur-sm border border-indigo-100/50 dark:border-slate-700/60 space-y-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-sky-600 rounded-xl shadow-lg shadow-indigo-500/20">
+                  <div className={cn("p-2.5 bg-gradient-to-br rounded-xl shadow-lg shadow-indigo-500/20", themeStyles.extractorIconGradient)}>
                     <Wand2 className="w-5 h-5 text-white" />
                   </div>
                   <h2 className="text-[17px] font-bold text-indigo-950 dark:text-slate-100 tracking-tight">AI Event Extraction</h2>
@@ -1076,7 +1145,10 @@ export default function ICSForm() {
                       type="button"
                       onClick={handleAIExtract}
                       disabled={aiLoading || (!aiText && aiFiles.length === 0)}
-                      className="flex-[1.3] flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-br from-indigo-600 to-sky-600 text-white font-semibold text-[15px] hover:shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50"
+                      className={cn(
+                        "flex-[1.3] flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-gradient-to-br text-white font-semibold text-[15px] hover:shadow-lg hover:shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50",
+                        themeStyles.primaryButtonGradient,
+                      )}
                     >
                       {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                       {aiLoading ? "Extracting..." : "Auto-Fill Event"}
@@ -1092,10 +1164,7 @@ export default function ICSForm() {
                         className="space-y-2"
                       >
                         <div className="h-2 rounded-full bg-indigo-100 dark:bg-slate-700 overflow-hidden">
-                          <motion.div
-                            className="h-full bg-gradient-to-r from-indigo-500 to-sky-500"
-                            style={{ width: `${aiProgress.percent}%` }}
-                          />
+                          <motion.div className={cn("h-full bg-gradient-to-r", themeStyles.progressGradient)} style={{ width: `${aiProgress.percent}%` }} />
                         </div>
                         <p className="text-[12px] text-indigo-800 dark:text-indigo-300 font-medium">{aiProgress.label}</p>
                       </motion.div>
@@ -1924,6 +1993,39 @@ export default function ICSForm() {
               </div>
 
               <div className="space-y-6">
+                <div className="space-y-3">
+                  <label className={labelStyles}>Theme</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveTheme("previous")}
+                      className={cn(
+                        "px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors",
+                        uiTheme === "previous"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
+                      )}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => saveTheme("current")}
+                      className={cn(
+                        "px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors",
+                        uiTheme === "current"
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
+                      )}
+                    >
+                      Current
+                    </button>
+                  </div>
+                  <p className="text-[12px] text-slate-500 dark:text-slate-300">
+                    Default starts on Previous theme.
+                  </p>
+                </div>
+
                 <div className="space-y-3">
                   <label className={labelStyles}>Default Time Zone</label>
                   <div className="relative">
