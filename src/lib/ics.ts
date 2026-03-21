@@ -82,6 +82,12 @@ function buildRRule(recurrence: EventFormData["recurrence"]): string {
   if (recurrence.byDay && recurrence.byDay.length > 0) {
     parts.push(`BYDAY=${recurrence.byDay.join(",")}`);
   }
+  if (recurrence.byMonthDay && recurrence.byMonthDay.length > 0) {
+    parts.push(`BYMONTHDAY=${recurrence.byMonthDay.join(",")}`);
+  }
+  if (typeof recurrence.bySetPos === "number" && Number.isFinite(recurrence.bySetPos)) {
+    parts.push(`BYSETPOS=${recurrence.bySetPos}`);
+  }
   if (recurrence.count && recurrence.count > 0) {
     parts.push(`COUNT=${recurrence.count}`);
   } else if (recurrence.until) {

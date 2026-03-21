@@ -9,6 +9,8 @@ export interface RecurrenceRule {
   count?: number;
   until?: string;
   byDay?: string[];
+  byMonthDay?: number[];
+  bySetPos?: number;
 }
 
 export interface EventFormData {

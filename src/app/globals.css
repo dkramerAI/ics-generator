@@ -16,6 +16,17 @@ body {
   color: #1d1d1f;
 }
 
+@media (prefers-color-scheme: dark) {
+  html {
+    background-color: #020617;
+  }
+
+  body {
+    background-color: #020617;
+    color: #e2e8f0;
+  }
+}
+
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0.5;
