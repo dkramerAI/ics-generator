@@ -149,6 +149,16 @@ export default function ICSForm() {
             if (ext.organizerEmail) next.organizerEmail = ext.organizerEmail;
             if (ext.allDay === true) next.allDay = true;
             
+            if (ext.recurrence && ext.recurrence.freq) {
+              next.recurrence = {
+                freq: ext.recurrence.freq || "",
+                interval: ext.recurrence.interval || 1,
+                byDay: ext.recurrence.byDay || [],
+                count: ext.recurrence.count || undefined,
+                until: ext.recurrence.until || undefined,
+              };
+            }
+            
             if (ext.reminders && Array.isArray(ext.reminders) && ext.reminders.length > 0) {
               next.reminders = ext.reminders.map((r: any) => ({
                 id: Math.random().toString(36).slice(2),

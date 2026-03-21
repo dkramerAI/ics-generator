@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
 
 Parsing Rules:
 - **EXTREMELY IMPORTANT**: Think like an executive assistant. Deduce exactly what is meant even if ambiguously stated.
-- **ARRAY PROCESSING**: If the text contains multiple distinct events, appointments, shifts, or dates, you MUST process every single one and output them as separate objects inside the \`events\` array. Do NOT combine them into one long string.
+- **ARRAY PROCESSING**: If the text contains multiple distinct events, appointments, shifts, or dates, you MUST process every single one and output them as separate objects inside the \`events\` array.
+- **RECURSION OVER DUPLICATION**: If an event explicitly repeats on a specific interval (e.g. 'every Monday' or 'daily until Jan 1st'), DO NOT output multiple distinct duplicate events. You MUST output exactly ONE event object and include a \`recurrence\` field. Example: \`"recurrence": { "freq": "WEEKLY", "interval": 1, "byDay": ["MO"], "until": "YYYY-MM-DD" }\`. \`freq\` MUST be "DAILY", "WEEKLY", "MONTHLY", or "YEARLY". \`byDay\` allows ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]. \`count\` is the raw integer limit. If the event does NOT recur, STRICTLY OMIT the \`recurrence\` field entirely so default states remain intact.
 - **RELATIVE DATE ANCHORING**: The User's absolute current exact local date/time is: \`${localDate}\`. The User's exact local timezone is \`${localTimezone}\`. You **MUST** use this precise timestamp as "Right Now / Today" so that references like "tomorrow", "tonight", "this weekend", or "next Friday" are calculated with mathematical perfection relative to their actual local reality, NOT UTC server time.
 - If a value cannot be found or inferred, use an empty string "" for strings, and false for booleans.
 - Dates must be in YYYY-MM-DD format. If a year is omitted (e.g., "Friday, October 12th"), calculate the closest UPCOMING occurrence of that date from the current date context.
