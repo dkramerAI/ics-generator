@@ -65,7 +65,7 @@ type UiTheme = "previous" | "current" | "chatgpt";
 const THEME_LABELS: Record<UiTheme, string> = {
   previous: "Previous (Original)",
   current: "Current (Sky)",
-  chatgpt: "ChatGPT (Green)",
+  chatgpt: "ChatGPT (Light Gray)",
 };
 
 const UI_THEME_STYLES: Record<
@@ -111,16 +111,16 @@ const UI_THEME_STYLES: Record<
   },
   chatgpt: {
     pageGradient:
-      "from-emerald-50/80 via-slate-50 to-zinc-50 dark:from-zinc-950 dark:via-slate-900 dark:to-zinc-900",
-    blobOne: "bg-emerald-200 dark:bg-emerald-900",
-    blobTwo: "bg-teal-200 dark:bg-teal-900",
-    blobThree: "bg-slate-300 dark:bg-slate-800",
-    titleGradient: "from-emerald-900 via-slate-800 to-teal-800 dark:from-zinc-100 dark:via-emerald-300 dark:to-teal-300",
-    headerIconColor: "text-emerald-600 dark:text-emerald-300",
-    aiPanelSurface: "bg-emerald-50/45 dark:bg-zinc-900/65 border-emerald-100/60 dark:border-zinc-700/70",
-    extractorIconGradient: "from-emerald-500 to-teal-600",
-    primaryButtonGradient: "from-emerald-600 to-teal-600",
-    progressGradient: "from-emerald-500 to-teal-500",
+      "from-zinc-50/95 via-slate-50/95 to-white dark:from-slate-900 dark:via-slate-800 dark:to-slate-900",
+    blobOne: "bg-slate-200 dark:bg-slate-700",
+    blobTwo: "bg-zinc-200 dark:bg-zinc-700",
+    blobThree: "bg-gray-300 dark:bg-gray-700",
+    titleGradient: "from-slate-900 via-zinc-700 to-slate-700 dark:from-slate-100 dark:via-slate-200 dark:to-zinc-300",
+    headerIconColor: "text-slate-600 dark:text-slate-300",
+    aiPanelSurface: "bg-white/85 dark:bg-slate-800/85 border-slate-200/80 dark:border-slate-600/70",
+    extractorIconGradient: "from-slate-600 to-zinc-600",
+    primaryButtonGradient: "from-slate-700 to-zinc-700",
+    progressGradient: "from-slate-500 to-zinc-500",
   },
 };
 
@@ -2063,11 +2063,11 @@ export default function ICSForm() {
                       className={cn(
                         "px-3 py-2.5 rounded-xl border text-[13px] font-semibold transition-colors",
                         uiTheme === "chatgpt"
-                          ? "bg-emerald-600 text-white border-emerald-600"
+                          ? "bg-slate-700 text-white border-slate-700 dark:bg-slate-200 dark:text-slate-900 dark:border-slate-200"
                           : "bg-white/70 dark:bg-slate-800/70 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700",
                       )}
                     >
-                      ChatGPT (Green)
+                      ChatGPT (Light Gray)
                     </button>
                   </div>
                   <p className="text-[12px] text-slate-500 dark:text-slate-300">
